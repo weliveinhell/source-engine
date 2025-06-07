@@ -2721,6 +2721,8 @@ bool CGameServer::SpawnServer( const char *szMapName, const char *szMapFile, con
       "BSD"
 #    endif
     );
+#elif defined(__EMSCRIPTEN__)
+		event->SetString( "os", "EMSCRIPTEN" );
 #else
 #error
 #endif

@@ -1152,7 +1152,11 @@ inline void CDmaElement<T>::Init( CDmElement *pOwner, const char *pAttributeName
 template <class T>
 inline UtlSymId_t CDmaElement<T>::GetElementType() const
 {
+#ifdef __EMSCRIPTEN__
+return this->Value().m_ElementType;
+#else
 	return this->Data().m_ElementType;
+#endif
 }
 
 template <class T>
@@ -1350,7 +1354,11 @@ inline int CDmaStringArrayBase<B>::InsertBefore( int elem, const char *pValue )
 template< class E, class B > 
 inline UtlSymId_t CDmaElementArrayConstBase<E,B>::GetElementType() const
 {
-	return this->Data().m_ElementType;
+	#ifdef __EMSCRIPTEN__
+	return this->Value().m_ElementType;
+	#else
+		return this->Data().m_ElementType;
+	#endif
 }
 
 template< class E, class B >

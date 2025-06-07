@@ -419,11 +419,11 @@ $Project
 		$File	"ragdoll.cpp"
 		$File	"$SRCDIR\game\shared\ragdoll_shared.cpp"
 		$File	"recvproxy.cpp"
-		$File	"basepresence.cpp"			[$WIN32||$POSIX]
+		$File	"basepresence.cpp"			
 		$File	"basepresence_xbox.cpp"		[$X360]
 		$File	"$SRCDIR\game\shared\rope_helpers.cpp"
 		$File	"$SRCDIR\game\shared\saverestore.cpp"
-		$File	"$SRCDIR\game\shared\sceneentity_shared.cpp"
+		//$File	"$SRCDIR\game\shared\sceneentity_shared.cpp"
 		$File	"ScreenSpaceEffects.cpp"
 		$File	"$SRCDIR\game\shared\sequence_Transitioner.cpp"
 		$File	"simple_keys.cpp"

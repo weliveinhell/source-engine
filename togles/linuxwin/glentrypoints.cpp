@@ -47,6 +47,10 @@
 #include <GL/glx.h>
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include <dlfcn.h>
+#endif
+
 // NOTE: This has to be the last file included!
 #include "tier0/memdbgon.h"
 
@@ -54,7 +58,7 @@
 #error
 #endif
 
-#if defined(PLATFORM_BSD) || defined(OSX) || defined(LINUX) || (defined (WIN32) && defined( DX_TO_GL_ABSTRACTION ))
+#if defined(PLATFORM_BSD) || defined(OSX) || defined(LINUX) || (defined (WIN32) && defined( DX_TO_GL_ABSTRACTION )) || defined(__EMSCRIPTEN__)
 	#include "appframework/ilaunchermgr.h"
 	ILauncherMgr *g_pLauncherMgr = NULL;
 #endif
@@ -127,15 +131,22 @@ bool g_bPrintOpenGLCalls = false;
 
 COpenGLEntryPoints *gGL = NULL;
 GL_GetProcAddressCallbackFunc_t gGL_GetProcAddressCallback = NULL;
+static void *togles_l_gles = NULL;
 
 void *VoidFnPtrLookup_GlMgr(const char *fn, bool &okay, const bool bRequired, void *fallback)
 {
 	void *retval = NULL;
+	
+#ifdef __EMSCRIPTEN__
+	retval = dlsym( togles_l_gles, fn );
+	if(retval != NULL) okay = true;
+#else
 	if ((!okay) && (!bRequired))  // always look up if required (so we get a complete list of crucial missing symbols).
 		return NULL;
 
 	// SDL does the right thing, so we never need to use tier0 in this case.
 	retval = (*gGL_GetProcAddressCallback)(fn, okay, bRequired, fallback);
+#endif
 	//printf("CDynamicFunctionOpenGL: SDL_GL_GetProcAddress(\"%s\") returned %p\n", fn, retval);
 	if ((retval == NULL) && (fallback != NULL))
 	{
@@ -155,9 +166,14 @@ void *VoidFnPtrLookup_GlMgr(const char *fn, bool &okay, const bool bRequired, vo
 
 COpenGLEntryPoints *GetOpenGLEntryPoints(GL_GetProcAddressCallbackFunc_t callback)
 {
+
 	if (gGL == NULL)
 	{
+#ifdef __EMSCRIPTEN__
+		togles_l_gles = dlopen("__main__", RTLD_LAZY);
+#else
 		gGL_GetProcAddressCallback = callback;
+#endif
 		gGL = new COpenGLEntryPoints();
 		if (!gGL->m_bHave_OpenGL)
 			Error( "Missing basic required OpenGL functionality." );

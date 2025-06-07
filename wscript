@@ -322,6 +322,9 @@ def options(opt):
 	grp.add_option('--sanitize', action = 'store', dest = 'SANITIZE', default = '',
 		help = 'build with sanitizers [default: %default]')
 
+	grp.add_option('--emscripten', action = 'store_true', dest = 'EMSCRIPTEN', default = False,
+		help = 'target emscripten [default: %default]')
+
 	opt.load('compiler_optimizations subproject')
 
 	opt.load('xcompile compiler_cxx compiler_c sdl2 clang_compilation_database strip_on_install_v2 waf_unit_test subproject')
@@ -391,14 +394,14 @@ def check_deps(conf):
 				conf.check_cfg(package='libedit', uselib_store='EDIT', args=['--cflags', '--libs'])
 			else:
 				conf.check_pkg('freetype2', 'FT2', FT2_CHECK)
-				conf.check_pkg('fontconfig', 'FC', FC_CHECK)
+				#conf.check_pkg('fontconfig', 'FC', FC_CHECK)
 				if conf.env.DEST_OS == "darwin":
 					conf.env.FRAMEWORK_OPENAL = "OpenAL"
 				else:
 					conf.check_cfg(package='openal', uselib_store='OPENAL', args=['--cflags', '--libs'])
 				conf.check_cfg(package='libjpeg', uselib_store='JPEG', args=['--cflags', '--libs'])
 				conf.check_cfg(package='libpng', uselib_store='PNG', args=['--cflags', '--libs'])
-				conf.check_cfg(package='libcurl', uselib_store='CURL', args=['--cflags', '--libs'])
+				#conf.check_cfg(package='libcurl', uselib_store='CURL', args=['--cflags', '--libs'])
 			conf.check_cfg(package='zlib', uselib_store='ZLIB', args=['--cflags', '--libs'])
 
 			if conf.options.OPUS:
@@ -435,6 +438,9 @@ def check_deps(conf):
 
 def configure(conf):
 	conf.load('fwgslib reconfigure compiler_optimizations')
+
+	if conf.options.EMSCRIPTEN:
+		conf.env.DEST_CPU = 'wasm32'
 
 	# Force XP compability, all build targets should add
 	# subsystem=bld.env.MSVC_SUBSYSTEM
@@ -597,6 +603,13 @@ def configure(conf):
 
 		cxxflags += conf.filter_cxxflags(compiler_optional_flags, cflags)
 		cflags += conf.filter_cflags(compiler_optional_flags + c_compiler_optional_flags, cflags)
+
+	# '-g', '-gsource-map', '--source-map-base', 'https://localhost/projects/source-engine/build/install/usr/local/', '-sSOURCE_MAP_PREFIXES=/=../../../../../'
+	if conf.options.EMSCRIPTEN:
+		all_flags = ['-sSHARED_MEMORY=1', '-sUSE_PTHREADS', '-sFULL_ES3']
+		linkflags += ['-sSIDE_MODULE', '-Wl,--allow-multiple-definition'] + all_flags
+		cflags += ['-D_DLL_EXT=.so'] + all_flags
+		cxxflags += ['-D_DLL_EXT=.so'] + all_flags
 
 	conf.env.append_unique('CFLAGS', cflags)
 	conf.env.append_unique('CXXFLAGS', cxxflags)

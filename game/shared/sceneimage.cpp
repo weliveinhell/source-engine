@@ -183,7 +183,9 @@ private:
 	CUtlStringMap< int >	m_StringMap;
 	unsigned int			m_nOffset;
 };
-CChoreoStringPool g_ChoreoStringPool;
+
+// it somehow manages to rewrite vtable of C_ShadowControl, so i made it to use heap
+static CChoreoStringPool* g_ChoreoStringPool = new CChoreoStringPool();
 
 //-----------------------------------------------------------------------------
 // Helper for crawling events to determine sounds
@@ -193,7 +195,7 @@ void FindSoundsInEvent( CChoreoEvent *pEvent, CUtlVector< short >& soundList )
 	if ( !pEvent || pEvent->GetType() != CChoreoEvent::SPEAK )
 		return;
 
-	unsigned short stringId = g_ChoreoStringPool.FindOrAddString( pEvent->GetParameters() );
+	unsigned short stringId = g_ChoreoStringPool->FindOrAddString( pEvent->GetParameters() );
 	if ( soundList.Find( stringId ) == soundList.InvalidIndex() )
 	{
 		soundList.AddToTail( stringId );
@@ -204,7 +206,7 @@ void FindSoundsInEvent( CChoreoEvent *pEvent, CUtlVector< short >& soundList )
 		char tok[ CChoreoEvent::MAX_CCTOKEN_STRING ];
 		if ( pEvent->GetPlaybackCloseCaptionToken( tok, sizeof( tok ) ) )
 		{
-			stringId = g_ChoreoStringPool.FindOrAddString( tok );
+			stringId = g_ChoreoStringPool->FindOrAddString( tok );
 			if ( soundList.Find( stringId ) == soundList.InvalidIndex() )
 			{
 				soundList.AddToTail( stringId );
@@ -255,7 +257,7 @@ bool CreateTargetFile_VCD( const char *pSourceName, const char *pTargetName, boo
 
 	// compile to binary buffer
 	g_SceneFiles[iScene].compiledBuffer.SetBigEndian( !bLittleEndian );
-	pChoreoScene->SaveToBinaryBuffer( g_SceneFiles[iScene].compiledBuffer, crcSource, &g_ChoreoStringPool );
+	pChoreoScene->SaveToBinaryBuffer( g_SceneFiles[iScene].compiledBuffer, crcSource, g_ChoreoStringPool );
 
 	unsigned int compressedSize;
 	unsigned char *pCompressedBuffer = LZMA_Compress( (unsigned char *)g_SceneFiles[iScene].compiledBuffer.Base(), g_SceneFiles[iScene].compiledBuffer.TellMaxPut(), &compressedSize );
@@ -364,7 +366,7 @@ bool CSceneImage::CreateSceneImageFile( CUtlBuffer &targetBuffer, char const *pc
 	// get the string pool
 	CUtlVector< unsigned int > stringOffsets;
 	CUtlBuffer stringPool;
-	g_ChoreoStringPool.GetTableAndPool( stringOffsets, stringPool );
+	g_ChoreoStringPool->GetTableAndPool( stringOffsets, stringPool );
 
 	if ( !bQuiet )
 	{

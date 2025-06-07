@@ -522,7 +522,7 @@ struct TOGL_CLASS IDirect3DDevice9 : public IUnknown
 	FORCEINLINE void TOGLMETHODCALLTYPE SetSamplerStates(DWORD Sampler, DWORD AddressU, DWORD AddressV, DWORD AddressW, DWORD MinFilter, DWORD MagFilter, DWORD MipFilter, DWORD MinLod, float LodBias );
 	void TOGLMETHODCALLTYPE SetSamplerStatesNonInline(DWORD Sampler, DWORD AddressU, DWORD AddressV, DWORD AddressW, DWORD MinFilter, DWORD MagFilter, DWORD MipFilter, DWORD MinLod, float LodBias );
 			
-#ifdef OSX
+#if defined(OSX) || defined(__EMSCRIPTEN__)
 	// required for 10.6 support
 	HRESULT TOGLMETHODCALLTYPE FlushIndexBindings(void);		// push index buffer (set index ptr)
 	HRESULT	TOGLMETHODCALLTYPE FlushVertexBindings(uint baseVertexIndex);	// push vertex streams (set attrib ptrs)

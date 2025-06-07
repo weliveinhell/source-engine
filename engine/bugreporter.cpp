@@ -112,6 +112,8 @@
 #define BUG_REPOSITORY_URL "/Volumes/bugs"
 #elif defined(LINUX) || defined(PLATFORM_BSD)
 #define BUG_REPOSITORY_URL "\\\\fileserver\\bugs"
+#elif defined(__EMSCRIPTEN__)
+#define BUG_REPOSITORY_URL ""
 #else
 //#error
 #endif
@@ -2257,11 +2259,14 @@ void NonFileSystem_CreatePath (const char *path)
 	}
 }
 
-#if defined(LINUX) || defined(PLATFORM_BSD)
+#if defined(LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
 #define COPYFILE_ALL 0
 #define BSIZE 65535
 int copyfile( const char *local, const char *remote, void *ignored, int ignoredFlags )
 {
+#ifdef __EMSCRIPTEN__
+	return -1;
+#else
 	ssize_t bytes;
 	int fps, fpd;
 	char buffer[BSIZE];
@@ -2278,6 +2283,7 @@ int copyfile( const char *local, const char *remote, void *ignored, int ignoredF
 	close(fpd);
 	close(fps);
 	return 0;
+#endif
 }
 #endif
 

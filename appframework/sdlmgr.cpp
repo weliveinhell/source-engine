@@ -23,6 +23,11 @@
 #include <EGL/egl.h>
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include <dlfcn.h>
+#include <emscripten/html5.h>
+#endif
+
 // NOTE: This has to be the last file included! (turned off below, since this is included like a header)
 #include "tier0/memdbgon.h"
 
@@ -36,7 +41,7 @@
 #define GLMPRINTF(args)
 #endif
 
-#if defined( OSX ) || defined( ANDROID )
+#if defined( OSX ) || defined( ANDROID ) || defined(__EMSCRIPTEN__)
 ConVar rawinput_set_one_time( "rawinput_set_one_time", "0", FCVAR_ARCHIVE|FCVAR_HIDDEN, "");
 #endif
 
@@ -198,9 +203,9 @@ void *VoidFnPtrLookup_GlMgr(const char *fn, bool &okay, const bool bRequired, vo
 #endif
 
 	// The SDL path would work on all these platforms, if we were using SDL there, too...
-
-
-#if defined ANDROID || defined TOGLES
+#if defined(__EMSCRIPTEN__)
+	retval = dlsym( l_gles, fn );
+#elif defined ANDROID || defined TOGLES
 	// SDL does the right thing, so we never need to use tier0 in this case.
 	if( _glGetProcAddress )
 	{
@@ -237,11 +242,13 @@ void *VoidFnPtrLookup_GlMgr(const char *fn, bool &okay, const bool bRequired, vo
 #else
 	okay = (okay && (retval != NULL));
 #endif
+#ifndef __EMSCRIPTEN__
 	if (bRequired && !okay)
 	{
 		// We can't continue execution, because one or more GL function pointers will be NULL.
 		Error( "Could not find required OpenGL entry point '%s'! Either your video card is unsupported, or your OpenGL driver needs to be updated.\n", fn);
 	}
+#endif
 
 	return retval;
 }
@@ -270,7 +277,7 @@ public:
 
 	// Get the next N events. The function returns the number of events that were filled into your array.
 	virtual int GetEvents( CCocoaEvent *pEvents, int nMaxEventsToReturn, bool debugEvents = false );
-#if defined(LINUX) || defined(PLATFORM_BSD)
+#if defined(LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
 	virtual int PeekAndRemoveKeyboardEvents( bool *pbEsc, bool *pbReturn, bool *pbSpace, bool debugEvent = false );
 #endif
 
@@ -602,8 +609,14 @@ InitReturnVal_t CSDLMgr::Init()
 
 
 #ifdef TOGLES
+#ifdef __EMSCRIPTEN__
+	// use main binary for emscripten, because opengl linked statically to it
+	l_egl = dlopen("__main__", RTLD_LAZY);
+	l_gles = dlopen("__main__", RTLD_LAZY);
+#else
 	l_egl = dlopen("libEGL.so", RTLD_LAZY);
 	l_gles = dlopen("libGLESv3.so", RTLD_LAZY);
+#endif
 
 	if( l_egl )
 	{
@@ -820,6 +833,9 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 #if defined( DX_TO_GL_ABSTRACTION )
 	flags |= SDL_WINDOW_OPENGL;
 #endif
+#ifdef __EMSCRIPTEN__
+	flags |= SDL_WINDOW_RESIZABLE;
+#endif
 	m_Window = SDL_CreateWindow( pTitle, x, y, width, height, flags );
 
 	if (m_Window == NULL)
@@ -1010,7 +1026,7 @@ int CSDLMgr::GetEvents( CCocoaEvent *pEvents, int nMaxEventsToReturn, bool debug
 	return nToWrite;
 }
 
-#if defined(LINUX) || defined(PLATFORM_BSD)
+#if defined(LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
 
 int CSDLMgr::PeekAndRemoveKeyboardEvents( bool *pbEsc, bool *pbReturn, bool *pbSpace, bool debugEvent )
 {
@@ -1145,7 +1161,7 @@ void CSDLMgr::OnFrameRendered()
 
 		ConVarRef rawinput( "m_rawinput" );
 
-#if defined( OSX ) || defined( ANDROID )
+#if defined( OSX ) || defined( ANDROID ) || defined(__EMSCRIPTEN__)
 		// We default raw input to on on Mac/Android and set it one time for all users since
 		// it didn't used to be the default.
 		if ( !rawinput_set_one_time.GetBool() )
@@ -1169,6 +1185,13 @@ void CSDLMgr::OnFrameRendered()
 
 		SDL_SetWindowGrab( m_Window, bWindowGrab );
 		SDL_SetRelativeMouseMode( bRelativeMouseMode );
+#ifdef __EMSCRIPTEN__
+		if(bWindowGrab) {
+			emscripten_request_pointerlock("canvas", true);
+		} else {
+			emscripten_exit_pointerlock();
+		}
+#endif
 
 		SDL_ShowCursor( m_bCursorVisible ? 1 : 0 );
 
@@ -1937,6 +1960,12 @@ void CSDLMgr::PumpWindowsMessageLoop()
 						}
 						break;
 					}
+#ifdef __EMSCRIPTEN__
+					case SDL_WINDOWEVENT_RESIZED:
+					{
+						printf("GOT RESIZE!!\n");
+					}
+#endif
 				}
 				break;
 

@@ -18,7 +18,7 @@
 
 // unicode character type
 // for more unicode manipulation functions #include <wchar.h>
-#if !defined(_WCHAR_T_DEFINED) && !defined(GNUC)
+#if !defined(_WCHAR_T_DEFINED) && !defined(GNUC) && !defined(__EMSCRIPTEN__)
 typedef unsigned short wchar_t;
 #define _WCHAR_T_DEFINED
 #endif

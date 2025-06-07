@@ -1627,7 +1627,7 @@ bool CThreadFullMutex::Release()
 //
 //-----------------------------------------------------------------------------
 
-#if defined( WIN32 ) || defined( _PS3 ) || defined( _OSX ) || defined (_LINUX) || defined(PLATFORM_BSD)
+#if defined( WIN32 ) || defined( _PS3 ) || defined( _OSX ) || defined (_LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
 #if !defined(_PS3)
 namespace GenericThreadLocals
 {
@@ -1853,7 +1853,7 @@ bool ThreadInterlockedAssignIf128( volatile int128 *pDest, const int128 &value, 
 }
 #endif
 
-#elif defined(GNUC)
+#elif defined(GNUC) || defined(__EMSCRIPTEN__)
 
 #ifdef OSX
 #include <libkern/OSAtomic.h>

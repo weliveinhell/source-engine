@@ -2630,7 +2630,7 @@ bool	GLMDetectOGLP( void )
 	#include <unistd.h>  
 #ifdef LINUX
 #include <linux/sysctl.h>
-#else
+#elif !defined(__EMSCRIPTEN__)
 #include <sys/sysctl.h>
 #endif
 #endif

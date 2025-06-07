@@ -12,6 +12,40 @@ def options(opt):
 	return
 
 def configure(conf):
+	'''
+	conf.env['LINKFLAGS'] = [ x for x in conf.env['LINKFLAGS'] if x != '-sSIDE_MODULE' ]
+
+	embed = [
+		'datacache/libdatacache.so',
+		'engine/libengine.so',
+		'filesystem/libfilesystem_stdio.so',
+		'gameui/libGameUI.so',
+		'inputsystem/libinputsystem.so',
+		'launcher/liblauncher.so',
+		'materialsystem/libmaterialsystem.so',
+		'scenefilecache/libscenefilecache.so',
+		'serverbrowser/libServerBrowser.so',
+		'materialsystem/shaderapidx9/libshaderapidx9.so',
+		'soundemittersystem/libsoundemittersystem.so',
+		'materialsystem/stdshaders/libstdshader_dx9.so',
+		'stub_steam/libsteam_api.so',
+		'studiorender/libstudiorender.so',
+		'tier0/libtier0.so',
+		'togl/libtogl.so',
+		'engine/voice_codecs/minimp3/libvaudio_minimp3.so',
+		'vgui2/src/libvgui2.so',
+		'vguimatsurface/libvguimatsurface.so',
+		'video/libvideo_services.so',
+		'vphysics/libvphysics.so',
+		'vstdlib/libvstdlib.so',
+		'utils/vtex/libvtex_dll.so'
+	]
+
+	conf.env.append_unique('LINKFLAGS',
+		['-sMAIN_MODULE', '-sINITIAL_MEMORY=512mb', '-sDYLINK_DEBUG=1', '-sASSERTIONS=2', '--use-preload-plugins'] +
+		[ '--preload-file=' + '/source-engine/build/' + x + '@/bin/' + x.split('/')[-1] for x in embed ]
+	)
+	'''
 	return
 
 def build(bld):
@@ -30,15 +64,15 @@ def build(bld):
 		source += ['launcher_main.rc']
 
 	install_path = bld.env.BINDIR
-	bld(
+
+	bld.stlib(
 		source   = source,
 		target   = PROJECT_NAME,
 		name     = PROJECT_NAME,
-		features = 'c cxx cxxprogram',
+		features = 'c cxx',
 		includes = includes,
 		defines  = defines,
 		use      = libs,
-		install_path = install_path,
 		subsystem = bld.env.MSVC_SUBSYSTEM,
 		idx      = bld.get_taskgen_count()
 	)

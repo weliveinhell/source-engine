@@ -5065,7 +5065,7 @@ CSysModule *CBaseFileSystem::LoadModule( const char *pFileName, const char *pPat
 			return pModule;
 		}
 
-#ifdef POSIX
+#if defined(POSIX) && !defined(__EMSCRIPTEN__)
 		Q_snprintf( tempPathID, sizeof(tempPathID), "%slib%s", m_SearchPaths[i].GetPathString(), pFileName ); // append the path to this dir.
 		pModule = Sys_LoadModule( tempPathID );
 		if ( pModule )

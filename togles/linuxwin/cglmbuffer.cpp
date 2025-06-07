@@ -36,6 +36,8 @@ bool g_bUsePseudoBufs = false; //( Plat_GetCommandLineA() ) ? ( strstr( Plat_Get
 #ifdef OSX
 // Significant perf degradation on some OSX parts if static buffers not disabled
 bool g_bDisableStaticBuffer = true;
+#elif defined(__EMSCRIPTEN__)
+bool g_bDisableStaticBuffer = false;
 #else
 bool g_bDisableStaticBuffer = true; //( Plat_GetCommandLineA() ) ? ( strstr( Plat_GetCommandLineA(), "-gl_disable_static_buffer" ) != NULL ) : false;
 #endif

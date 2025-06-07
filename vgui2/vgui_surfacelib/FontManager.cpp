@@ -584,7 +584,7 @@ FallbackFont_t g_FallbackFonts[] =
 	{ NULL, "Monaco" }		// every other font falls back to this
 };
 
-#elif defined(LINUX) || defined(PLATFORM_BSD)
+#elif defined(LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
 static const char *g_szValidAsianFonts[] = { "Marlett", "WenQuanYi Zen Hei", "unifont", NULL };
 
 // list of how fonts fallback
@@ -649,7 +649,7 @@ const char *CFontManager::GetForeignFallbackFontName()
 	return "Tahoma";
 #elif defined(OSX)
 	return "Helvetica";
-#elif defined(LINUX) || defined(PLATFORM_BSD)
+#elif defined(LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
 	return "WenQuanYi Zen Hei";
 #elif defined(_PS3)
 	return "Tahoma";

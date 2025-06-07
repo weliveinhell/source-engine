@@ -235,6 +235,14 @@ int main( int argc, char *argv[] )
 		execve(argv[0], argv, environ);
 	}
 
+#ifdef __EMSCRIPTEN__
+	void *launcher = dlopen( "liblauncher.so", RTLD_NOW );
+	if ( !launcher ) {
+		fprintf( stderr, "%s\nFailed to load the launcher\n", dlerror() );
+		return 0;
+	}
+
+#else
 	void *launcher = dlopen( "bin/liblauncher" DLL_EXT_STRING, RTLD_NOW );
 	if ( !launcher )
 		fprintf( stderr, "%s\nFailed to load the launcher\n", dlerror() );
@@ -247,7 +255,7 @@ int main( int argc, char *argv[] )
 		fprintf( stderr, "%s\nFailed to load the launcher\n", dlerror() );
 		return 0;
 	}
-
+#endif
 	LauncherMain_t main = (LauncherMain_t)dlsym( launcher, "LauncherMain" );
 	if ( !main )
 	{
@@ -255,7 +263,7 @@ int main( int argc, char *argv[] )
 		return 0;
 	}
 
-#if defined(__clang__) && !defined(OSX)
+#if defined(__clang__) && !defined(OSX) && !defined(__EMSCRIPTEN__)
 	// When building with clang we absolutely need the allocator to always
 	// give us 16-byte aligned memory because if any objects are tagged as
 	// being 16-byte aligned then clang will generate SSE instructions to move

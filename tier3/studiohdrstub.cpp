@@ -14,7 +14,7 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
-
+#ifndef __EMSCRIPTEN__
 //-----------------------------------------------------------------------------
 // FIXME: This trashy glue code is really not acceptable. Figure out a way of making it unnecessary.
 //-----------------------------------------------------------------------------
@@ -45,3 +45,4 @@ const studiohdr_t *virtualgroup_t::GetStudioHdr( void ) const
 	return g_pMDLCache->GetStudioHdr( VoidPtrToMDLHandle( cache ) );
 }
 
+#endif

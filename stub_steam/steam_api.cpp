@@ -1,3 +1,8 @@
+#include <stdint.h>
+typedef uint64_t uint64;
+typedef uint32_t uint32;
+typedef uint16_t uint16;
+
 #define _CRT_SECURE_NO_WARNINGS
 #define STEAM_API_EXPORTS
 
@@ -32,30 +37,30 @@ S_API void SteamAPI_ReleaseCurrentThreadMemory() {
 
 }
 
-S_API void SteamAPI_WriteMiniDump() {
+S_API void SteamAPI_WriteMiniDump(uint32 uStructuredExceptionCode, void* pvExceptionInfo, uint32 uBuildID) {
 
 }
 
-S_API void SteamAPI_SetMiniDumpComment() {
+S_API void SteamAPI_SetMiniDumpComment(const char *pchMsg) {
 
 }
 
 S_API void SteamAPI_RunCallbacks() {
 }
 
-S_API void SteamAPI_RegisterCallback() {
+S_API void SteamAPI_RegisterCallback(void *pCallback, int iCallback) {
 
 }
 
-S_API void SteamAPI_UnregisterCallback() {
+S_API void SteamAPI_UnregisterCallback(void *pCallback) {
 
 }
 
-S_API void SteamAPI_RegisterCallResult() {
+S_API void SteamAPI_RegisterCallResult(void*, uint64) {
 
 }
 
-S_API void SteamAPI_UnregisterCallResult() {
+S_API void SteamAPI_UnregisterCallResult(void*, uint64) {
 
 }
 
@@ -82,15 +87,15 @@ S_API int SteamAPI_GetHSteamPipe() {
 	return 0;
 }
 
-S_API void SteamAPI_SetTryCatchCallbacks() {
+S_API void SteamAPI_SetTryCatchCallbacks(bool bTryCatchCallbacks) {
 
 }
 
-S_API void SteamAPI_SetBreakpadAppID() {
+S_API void SteamAPI_SetBreakpadAppID(uint32 unAppID) {
 
 }
 
-S_API void SteamAPI_UseBreakpadCrashHandler() {
+S_API void SteamAPI_UseBreakpadCrashHandler(char const *pchVersion, char const *pchDate, char const *pchTime, bool bFullMemoryDumps, void *pvContext, void* m_pfnPreMinidumpCallback) {
 
 }
 
@@ -174,7 +179,7 @@ S_API int SteamGameServer_GetIPCCallCount() {
 	return 0;
 }
 
-S_API int SteamGameServer_InitSafe() {
+S_API int SteamGameServer_InitSafe(uint32 unIP, uint16 usSteamPort, uint16 usGamePort, uint16 usQueryPort, int eServerMode, const char *pchVersionString) {
 	return 0;
 }
 

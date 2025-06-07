@@ -7,8 +7,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#ifdef LINUX
+#if defined(LINUX)
 #include <linux/sysctl.h>
+#elif defined(__EMSCRIPTEN__)
+// nothing
 #else
 #include <sys/sysctl.h>
 # ifdef __APPLE__
@@ -101,7 +103,9 @@ uint64 GetCPUFreqFromPROC()
 
 uint64 CalculateCPUFreq()
 {
-#if defined(__APPLE__) || defined(PLATFORM_BSD)
+#if defined(__EMSCRIPTEN__)
+	return (uint64)2000000000;
+#elif defined(__APPLE__) || defined(PLATFORM_BSD)
 	return GetCPUFreqFromPROC();
 #else
 	// Try to open cpuinfo_max_freq. If the kernel was built with cpu scaling support disabled, this will fail.

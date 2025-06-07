@@ -3300,10 +3300,10 @@ void NET_Init( bool bIsDedicated )
 	}
 
 	const int nProtocol = X360SecureNetwork() ? IPPROTO_VDP : IPPROTO_UDP;
-
+#ifndef __EMSCRIPTEN__
 	// open client socket for masterserver
 	OpenSocketInternal( NS_CLIENT, clientport.GetInt(), PORT_SERVER, "client", nProtocol, true );
-
+#endif
 	if ( bIsDedicated )
 	{
 		// set dedicated MP mode

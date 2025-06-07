@@ -25,6 +25,10 @@
 #include <signal.h>
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #include <stdarg.h>
 #include "quakedef.h"
 #include "idedicatedexports.h"
@@ -948,6 +952,9 @@ public:
 	// Reset the map we're on
 	virtual void SetMap( const char *pMapName );
 
+#ifdef __EMSCRIPTEN__
+	bool MainLoopIter();
+#endif
 	bool MainLoop();
 
 	int RunListenServer();
@@ -1493,10 +1500,26 @@ void StopGProfiler()
 #endif
 }
 
+#ifdef __EMSCRIPTEN__
+void em_loop_iteration() {
+	s_EngineAPI.MainLoopIter();
+}
+
+bool CEngineAPI::MainLoop() {
+	emscripten_set_main_loop(em_loop_iteration, 0, true);
+	return false; // this should never happen, emscripten should throw an exception after set_main_loop was called
+}
+#endif
 
 //-----------------------------------------------------------------------------
 // Purpose: Message pump
 //-----------------------------------------------------------------------------
+#ifdef __EMSCRIPTEN__
+static bool bIdle = true; // FIXME?
+static long lIdleCount = 0;
+
+bool CEngineAPI::MainLoopIter()
+#else
 bool CEngineAPI::MainLoop()
 {
 	bool bIdle = true;
@@ -1504,6 +1527,7 @@ bool CEngineAPI::MainLoop()
 
 	// Main message pump
 	while ( true )
+#endif
 	{
 		// Pump messages unless someone wants to quit
 		if ( eng->GetQuitting() != IEngine::QUIT_NOTQUITTING )
@@ -1544,9 +1568,13 @@ bool CEngineAPI::MainLoop()
 		{
 			g_pHammer->RunFrame();
 		}
+#ifdef __EMSCRIPTEN__
+		return false;
+#else
 	}
 
 	return false;
+#endif
 }
 
 

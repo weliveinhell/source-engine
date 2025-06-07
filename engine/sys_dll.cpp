@@ -711,7 +711,8 @@ void Sys_InitMemory( void )
 			line = ptr;
 		}
 	}
-
+#elif defined(__EMSCRIPTEN__)
+	memsize = 0xFFFFFFFFUL;
 #else
 #error Write me.
 #endif
