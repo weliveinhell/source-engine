@@ -235,9 +235,10 @@ int main( int argc, char *argv[] )
 		execve(argv[0], argv, environ);
 	}
 
-#ifdef __EMSCRIPTEN__
-	void *launcher = dlopen( "liblauncher.so", RTLD_NOW );
-	if ( !launcher ) {
+#if IsWasm()
+	void *launcher = dlopen( "liblauncher" DLL_EXT_STRING, RTLD_NOW );
+	if ( !launcher )
+	{
 		fprintf( stderr, "%s\nFailed to load the launcher\n", dlerror() );
 		return 0;
 	}

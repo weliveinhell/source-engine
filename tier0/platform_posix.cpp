@@ -502,6 +502,13 @@ bool Plat_IsInDebugSession()
 	return ( tracerpid > 0 );
 }
 
+#elif IsWasm()
+
+bool Plat_IsInDebugSession()
+{
+	return false;
+}
+
 #endif // defined( LINUX )
 
 void Plat_DebugString( const char * psz )
@@ -559,7 +566,7 @@ PLATFORM_INTERFACE const char *Plat_GetCommandLineA()
 
 PLATFORM_INTERFACE bool GetMemoryInformation( MemoryInformation *pOutMemoryInfo )
 {
-	#if defined( LINUX ) || defined( OSX ) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
+	#if defined(POSIX)
 		return false;
 	#else
 		#error "Need to fill out GetMemoryInformation or at least return false for this platform"
@@ -677,9 +684,7 @@ PLATFORM_INTERFACE void Plat_SetWatchdogHandlerFunction( Plat_WatchDogHandlerFun
 #include <malloc.h>
 #endif
 #include <tier1/utlintrusivelist.h>
-#ifndef __EMSCRIPTEN__
 #include <execinfo.h>
-#endif
 #include <tier1/utlvector.h>
      
 #define MEMALLOC_HASHSIZE 8193
@@ -783,7 +788,7 @@ static void InstallHooks( void )
 	__realloc_hook = ReallocHook;
 
 }
-#elif OSX || PLATFORM_BSD || defined(__EMSCRIPTEN__)
+#elif defined(POSIX)
 
 
 static void RemoveHooks( void )
@@ -803,7 +808,6 @@ static void InstallHooks( void )
 
 static void AddMemoryAllocation( void *pResult, size_t size )
 {
-#ifndef __EMSCRIPTEN__
 	if ( pResult )
 	{
 		g_LinuxMemStats.nNumMallocs++;
@@ -851,7 +855,6 @@ static void AddMemoryAllocation( void *pResult, size_t size )
 		pFoundCtx->m_nMaximumSize = MAX( pFoundCtx->m_nCurrentAllocSize, pFoundCtx->m_nMaximumSize );
 		pFoundCtx->m_TotalNumAllocs++;
 	}
-#endif
 }
 
 
@@ -992,9 +995,8 @@ static inline bool SortLessFunc( CLinuxMallocContext * const &left, CLinuxMalloc
 
 void DumpMemoryLog( int nThresh )
 {
-#ifndef __EMSCRIPTEN__
 	AUTO_LOCK( s_MemoryMutex );
-    Plat_EndWatchdogTimer();
+	Plat_EndWatchdogTimer();
 	RemoveHooks();
 	std::vector<CLinuxMallocContext *> memList;
 	
@@ -1024,14 +1026,12 @@ void DumpMemoryLog( int nThresh )
 	}
 	Msg("End of memory list\n" );
 	InstallHooks();
-#endif
 }
 
 void DumpChangedMemory( int nThresh )
 {
-#ifndef __EMSCRIPTEN__
 	AUTO_LOCK( s_MemoryMutex );
-    Plat_EndWatchdogTimer();
+	Plat_EndWatchdogTimer();
 	RemoveHooks();
 	std::vector<CLinuxMallocContext *> memList;
 	
@@ -1060,7 +1060,6 @@ void DumpChangedMemory( int nThresh )
 	}
 	Msg("End of memory list\n" );
 	InstallHooks();
-#endif
 }
 
 void SetMemoryMark( void )

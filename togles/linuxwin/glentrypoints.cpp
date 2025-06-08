@@ -58,7 +58,7 @@
 #error
 #endif
 
-#if defined(PLATFORM_BSD) || defined(OSX) || defined(LINUX) || (defined (WIN32) && defined( DX_TO_GL_ABSTRACTION )) || defined(__EMSCRIPTEN__)
+#ifdef DX_TO_GL_ABSTRACTION
 	#include "appframework/ilaunchermgr.h"
 	ILauncherMgr *g_pLauncherMgr = NULL;
 #endif
@@ -131,7 +131,9 @@ bool g_bPrintOpenGLCalls = false;
 
 COpenGLEntryPoints *gGL = NULL;
 GL_GetProcAddressCallbackFunc_t gGL_GetProcAddressCallback = NULL;
+#ifdef __EMSCRIPTEN__
 static void *togles_l_gles = NULL;
+#endif
 
 void *VoidFnPtrLookup_GlMgr(const char *fn, bool &okay, const bool bRequired, void *fallback)
 {
@@ -139,7 +141,7 @@ void *VoidFnPtrLookup_GlMgr(const char *fn, bool &okay, const bool bRequired, vo
 	
 #ifdef __EMSCRIPTEN__
 	retval = dlsym( togles_l_gles, fn );
-	if(retval != NULL) okay = true;
+	if (retval != NULL) okay = true;
 #else
 	if ((!okay) && (!bRequired))  // always look up if required (so we get a complete list of crucial missing symbols).
 		return NULL;

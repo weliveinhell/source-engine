@@ -194,7 +194,6 @@ $Project "tier0"
 		$File	"$SRCDIR\public\tier0\ia32detect.h"
 		$File	"$SRCDIR\public\tier0\icommandline.h"
 		$File	"$SRCDIR\public\tier0\IOCTLCodes.h"
-		$File	"$SRCDIR\public\tier0\K8PerformanceCounters.h"
 		$File	"$SRCDIR\public\tier0\l2cache.h"
 		$File	"$SRCDIR\public\tier0\pmc360.h"		[$X360]
 		$File	"$SRCDIR\public\tier0\mem.h"

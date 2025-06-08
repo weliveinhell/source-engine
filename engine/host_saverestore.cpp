@@ -58,7 +58,6 @@
 #include "saverestore_filesystem.h"
 #include "tier1/callqueue.h"
 #include "vstdlib/jobthread.h"
-#include "enginebugreporter.h"
 #include "tier1/memstack.h"
 #include "vstdlib/jobthread.h"
 
@@ -629,8 +628,8 @@ int CSaveRestore::IsValidSave( void )
 			return 0;
 		}
 			
-		// we can't save if we're dead... unless we're reporting a bug.
-		if ( pl->deadflag != false && !bugreporter->IsVisible() )
+		// we can't save if we're dead...
+		if ( pl->deadflag != false )
 		{
 			ConMsg ("Can't savegame with a dead player\n");
 			return 0;
@@ -3269,6 +3268,8 @@ void CSaveRestore::Init( void )
 		int dummy2 = 1;
 		serverGameClients->GetPlayerLimits( minplayers, dummy, dummy2 );
 	}
+	m_nDeferredCommandFrames = 0;
+	m_szSaveGameScreenshotFile[0] = 0;
 #ifndef __EMSCRIPTEN__ // FIXME
 	if ( !serverGameClients || 
 		( minplayers == 1 ) )
@@ -3292,13 +3293,11 @@ void CSaveRestore::Init( void )
 		g_pSaveThread = CreateThreadPool();
 		g_pSaveThread->Start( threadPoolStartParams, "SaveJob" );
 	}
-#endif
-	m_nDeferredCommandFrames = 0;
-	m_szSaveGameScreenshotFile[0] = 0;
 	if ( !IsX360() && !CommandLine()->FindParm( "-noclearsave" ) )
 	{
 		ClearSaveDir();
 	}
+#endif
 }
 
 //-----------------------------------------------------------------------------

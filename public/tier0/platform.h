@@ -513,8 +513,6 @@ typedef void * HINSTANCE;
 
 #elif GNUC
 	#define DECL_ALIGN(x) __attribute__((aligned(x)))
-#elif defined(__EMSCRIPTEN__)
-	#define DECL_ALIGN(x) __attribute__((aligned(x)))
 #else
         #define DECL_ALIGN(x) /* */
 #endif
@@ -534,18 +532,6 @@ typedef void * HINSTANCE;
 #define ALIGN128_POST
 #elif defined( GNUC )
 // gnuc has the align decoration at the end
-#define ALIGN4
-#define ALIGN8 
-#define ALIGN16
-#define ALIGN32
-#define ALIGN128
-
-#define ALIGN4_POST DECL_ALIGN(4)
-#define ALIGN8_POST DECL_ALIGN(8)
-#define ALIGN16_POST DECL_ALIGN(16)
-#define ALIGN32_POST DECL_ALIGN(32)
-#define ALIGN128_POST DECL_ALIGN(128)
-#elif defined( __EMSCRIPTEN__ )
 #define ALIGN4
 #define ALIGN8 
 #define ALIGN16
@@ -584,7 +570,7 @@ typedef void * HINSTANCE;
 //-----------------------------------------------------------------------------
 // Stack-based allocation related helpers
 //-----------------------------------------------------------------------------
-#if defined( GNUC ) || defined(__EMSCRIPTEN__)
+#if defined( GNUC )
 	#define stackalloc( _size )		alloca( ALIGN_VALUE( _size, 16 ) )
 #if defined(_LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
 	#define mallocsize( _p )	( malloc_usable_size( _p ) )
@@ -623,11 +609,6 @@ typedef void * HINSTANCE;
 	#define RESTRICT_FUNC
 	// squirrel.h does a #define printf DevMsg which leads to warnings when we try
 	// to use printf as the prototype format function. Using __printf__ instead.
-	#define FMTFUNCTION( fmtargnumber, firstvarargnumber ) __attribute__ (( format( __printf__, fmtargnumber, firstvarargnumber )))
-#elif defined(__EMSCRIPTEN__)
-	#define SELECTANY static
-	#define RESTRICT
-	#define RESTRICT_FUNC
 	#define FMTFUNCTION( fmtargnumber, firstvarargnumber ) __attribute__ (( format( __printf__, fmtargnumber, firstvarargnumber )))
 #else
 	#define SELECTANY static
@@ -669,21 +650,6 @@ typedef void * HINSTANCE;
 	#define DLL_LOCAL
 
 #elif defined GNUC
-// Used for dll exporting and importing
-#define  DLL_EXPORT   extern "C" __attribute__ ((visibility("default")))
-#define  DLL_IMPORT   extern "C"
-
-// Can't use extern "C" when DLL exporting a class
-#define  DLL_CLASS_EXPORT __attribute__ ((visibility("default")))
-#define  DLL_CLASS_IMPORT
-
-// Can't use extern "C" when DLL exporting a global
-#define  DLL_GLOBAL_EXPORT   extern __attribute ((visibility("default")))
-#define  DLL_GLOBAL_IMPORT   extern
-
-#define  DLL_LOCAL __attribute__ ((visibility("hidden")))
-
-#elif defined __EMSCRIPTEN__
 // Used for dll exporting and importing
 #define  DLL_EXPORT   extern "C" __attribute__ ((visibility("default")))
 #define  DLL_IMPORT   extern "C"
@@ -939,7 +905,7 @@ static FORCEINLINE double fsel(double fComparand, double fValGE, double fLT)
 
 		#endif
 	#endif
-#elif defined (__arm__) || defined (__aarch64__) || defined(__EMSCRIPTEN__)
+#elif defined (__arm__) || defined (__aarch64__) || IsWasm()
 	inline void SetupFPUControlWord() {}
 #else
 	inline void SetupFPUControlWord()
@@ -1276,7 +1242,7 @@ PLATFORM_INTERFACE struct tm *		Plat_localtime( const time_t *timep, struct tm *
 
 inline uint64 Plat_Rdtsc()
 {
-#if ((defined( __arm__ ) || defined( __aarch64__ )) && defined (POSIX)) || defined (__EMSCRIPTEN__)
+#if ((defined( __arm__ ) || defined( __aarch64__ )) && defined (POSIX)) || IsWasm()
 	struct timespec t;
 	clock_gettime( CLOCK_REALTIME, &t);
 	return t.tv_sec * 1000000000ULL + t.tv_nsec;
@@ -1332,7 +1298,6 @@ struct CPUInformation
 		 m_bFCMOV : 1,  // Is FCMOV supported?
 		 m_bSSE	  : 1,	// Is SSE supported?
 		 m_bSSE2  : 1,	// Is SSE2 Supported?
-		 m_b3DNow : 1,	// Is 3DNow! Supported?
 		 m_bMMX   : 1,	// Is MMX supported?
 		 m_bHT	  : 1;	// Is HyperThreading supported?
 
@@ -1449,11 +1414,8 @@ PLATFORM_INTERFACE void* Plat_SimpleLog( const tchar* file, int line );
 //-----------------------------------------------------------------------------
 // Returns true if debugger attached, false otherwise
 //-----------------------------------------------------------------------------
-#if defined(_WIN32) || defined(LINUX) || defined(OSX) || defined(PLATFORM_BSD)
+#if defined(_WIN32) || defined(POSIX)
 PLATFORM_INTERFACE bool Plat_IsInDebugSession();
-PLATFORM_INTERFACE void Plat_DebugString( const char * );
-#elif defined(__EMSCRIPTEN__)
-inline bool Plat_IsInDebugSession( bool bForceRecheck = false ) { return false; }
 PLATFORM_INTERFACE void Plat_DebugString( const char * );
 #else
 #warning "Plat_IsInDebugSession isn't working properly"

@@ -4,12 +4,13 @@
 //
 // $NoKeywords: $
 //=============================================================================//
+#include "tier0/platform.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #if defined(LINUX)
 #include <linux/sysctl.h>
-#elif defined(__EMSCRIPTEN__)
+#elif IsWasm()
 // nothing
 #else
 #include <sys/sysctl.h>
@@ -21,7 +22,6 @@
 #endif
 #include <sys/time.h>
 #include <unistd.h>
-#include <tier0/platform.h>
 #include <errno.h>
 
 #define rdtsc(x) \
@@ -64,7 +64,7 @@ uint64 GetCPUFreqFromPROC()
 	return freq_hz;
 }
 
-#else
+#elif !IsWasm()
 
 // Linux
 uint64 GetCPUFreqFromPROC()
@@ -103,11 +103,9 @@ uint64 GetCPUFreqFromPROC()
 
 uint64 CalculateCPUFreq()
 {
-#if defined(__EMSCRIPTEN__)
-	return (uint64)2000000000;
-#elif defined(__APPLE__) || defined(PLATFORM_BSD)
+#if defined(__APPLE__) || defined(PLATFORM_BSD)
 	return GetCPUFreqFromPROC();
-#else
+#elif !IsWasm()
 	// Try to open cpuinfo_max_freq. If the kernel was built with cpu scaling support disabled, this will fail.
 	FILE *fp = fopen( "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", "r" );
 	if ( fp )
@@ -128,7 +126,7 @@ uint64 CalculateCPUFreq()
 		}
 	}
 
-#if !defined(__arm__) && !defined(__aarch64__)
+# if !defined(__arm__) && !defined(__aarch64__)
 	// fallback mechanism to calculate when failed
 	// Compute the period. Loop until we get 3 consecutive periods that
 	// are the same to within a small error. The error is chosen
@@ -179,10 +177,10 @@ uint64 CalculateCPUFreq()
 	}
 
 	return period;
-#else
+# endif // if !ARM
+#endif // if APPLE
+
 	// ARM hard-coded frequency
 	return (uint64)2000000000;
-#endif // if !ARM
-#endif // if APPLE
 }
 

@@ -33,7 +33,6 @@
 #include "vgui_DebugSystemPanel.h"
 #include "tier0/vprof.h"
 #include "cl_demoactionmanager.h"
-#include "enginebugreporter.h"
 #include "engineperftools.h"
 #include "icolorcorrectiontools.h"
 #include "tier0/icommandline.h"
@@ -743,12 +742,6 @@ void CEngineVGui::Init()
 		// Install texture view panel
 		TxViewPanel::Install( staticEngineToolsPanel );
 
-		COM_TimestampedLog( "Install bug reporter" );
-
-		// Create and initialize bug reporting system
-		bugreporter->InstallBugReportingUI( staticGameUIPanel, IEngineBugReporter::BR_AUTOSELECT );
-		bugreporter->Init();
-
 		COM_TimestampedLog( "Install perf tools" );
 
 		// Create a performance toolkit system
@@ -917,7 +910,6 @@ void CEngineVGui::Shutdown()
 	}
 
 	DestroyVProfPanels();
-	bugreporter->Shutdown();
 	colorcorrectiontools->Shutdown();
 	perftools->Shutdown();
 
@@ -1019,7 +1011,7 @@ bool CEngineVGui::ShouldPause()
 {
 	if ( IsPC() )
 	{
-		return bugreporter->ShouldPause() || perftools->ShouldPause();
+		return perftools->ShouldPause();
 	}
 	return false;
 }

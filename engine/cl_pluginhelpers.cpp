@@ -250,13 +250,13 @@ void CPluginGameUIDialog::Show( DIALOG_TYPE type, KeyValues *kv )
 //-----------------------------------------------------------------------------
 // Purpose: the individual message snippets
 //-----------------------------------------------------------------------------
-class CMessage : public vgui::Label
+class CMessageLabel : public vgui::Label
 {
 private:
-	DECLARE_CLASS_SIMPLE( CMessage, vgui::Label );
+	DECLARE_CLASS_SIMPLE( CMessageLabel, vgui::Label );
 public:
-	CMessage(vgui::Panel *parent, const char *panelName, const char *text);
-	~CMessage();
+	CMessageLabel(vgui::Panel *parent, const char *panelName, const char *text);
+	~CMessageLabel();
 
 	bool HasExtraPanel() { return m_bHasExtraPanel; }
 
@@ -267,16 +267,16 @@ private:
 	bool m_bHasExtraPanel;
 };
 
-CMessage::CMessage( vgui::Panel *parent, const char *panelName, const char *text ) : vgui::Label( parent, panelName, text )
+CMessageLabel::CMessageLabel( vgui::Panel *parent, const char *panelName, const char *text ) : vgui::Label( parent, panelName, text )
 {
 	m_bHasExtraPanel = false;
 }
 
-CMessage::~CMessage()
+CMessageLabel::~CMessageLabel()
 {
 }
 
-void CMessage::ApplySchemeSettings( vgui::IScheme *pScheme )
+void CMessageLabel::ApplySchemeSettings( vgui::IScheme *pScheme )
 {
 	vgui::HFont font = pScheme->GetFont( "PluginText", false );
 	if ( font == vgui::INVALID_FONT )
@@ -312,7 +312,7 @@ protected:
 private:
 	enum { MESSAGE_X_INSET = 40, MAX_TEXT_LEN_PIXELS = 400  };
 
-	CMessage *m_Message;
+	CMessageLabel *m_Message;
 	vgui::ImagePanel *m_pExtraPanelIcon;
 	bool m_bHidingControl;
 	int m_iTargetH, m_iTargetW;
@@ -341,7 +341,7 @@ CPluginHudMessage::CPluginHudMessage( vgui::VPANEL parent ) : vgui::Frame( NULL,
 	m_pExtraPanelIcon = new vgui::ImagePanel( this, "ExtraPanelIcon" );
 	m_pExtraPanelIcon->SetVisible( false );
 
-	m_Message = new CMessage( this, "Msg", "");
+	m_Message = new CMessageLabel( this, "Msg", "");
 	m_Message->SetVisible( false );
 
 	m_pAnimationController = new vgui::AnimationController( NULL );

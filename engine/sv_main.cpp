@@ -2714,15 +2714,15 @@ bool CGameServer::SpawnServer( const char *szMapName, const char *szMapFile, con
 #elif defined ( OSX )
 		event->SetString( "os", "OSX" );
 #elif defined(PLATFORM_BSD)
-    event->SetString("os",
+		event->SetString("os",
 #    ifdef __FreeBSD__
-      "FreeBSD"
+			"FreeBSD"
 #    else
-      "BSD"
+			"BSD"
 #    endif
-    );
-#elif defined(__EMSCRIPTEN__)
-		event->SetString( "os", "EMSCRIPTEN" );
+		);
+#elif IsWasm()
+		event->SetString( "os", "WASM" );
 #else
 #error
 #endif

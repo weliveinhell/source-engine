@@ -1201,7 +1201,7 @@ FORCEINLINE int RoundFloatToInt(float f)
 	};
 	flResult = __fctiw( f );
 	return pResult[1];
-#elif defined (__arm__) ||  defined (__aarch64__) || defined(__EMSCRIPTEN__)
+#elif defined (__arm__) ||  defined (__aarch64__) || IsWasm()
         return (int)(f + 0.5f);
 #else
 #error Unknown architecture
@@ -1233,7 +1233,7 @@ FORCEINLINE unsigned long RoundFloatToUnsignedLong(float f)
 	Assert( pIntResult[1] >= 0 );
 	return pResult[1];
 #else  // !X360
-#if defined(__arm__) || defined(__aarch64__) || defined(__EMSCRIPTEN__)
+#if defined(__arm__) || defined(__aarch64__) || IsWasm()
         return (unsigned long)(f + 0.5f);
 #elif defined( PLATFORM_WINDOWS_PC64 )
 	uint nRet = ( uint ) f;
@@ -1767,8 +1767,7 @@ float CalcDistanceToLineSegment2D( Vector2D const &P, Vector2D const &vLineA, Ve
 float CalcDistanceSqrToLineSegment2D( Vector2D const &P, Vector2D const &vLineA, Vector2D const &vLineB, float *t=0 );
 
 // Init the mathlib
-void MathLib_Init( float gamma = 2.2f, float texGamma = 2.2f, float brightness = 0.0f, int overbright = 2.0f, bool bAllow3DNow = true, bool bAllowSSE = true, bool bAllowSSE2 = true, bool bAllowMMX = true );
-bool MathLib_3DNowEnabled( void );
+void MathLib_Init( float gamma = 2.2f, float texGamma = 2.2f, float brightness = 0.0f, int overbright = 2.0f, bool bUnused = false, bool bAllowSSE = true, bool bAllowSSE2 = true, bool bAllowMMX = true );
 bool MathLib_MMXEnabled( void );
 bool MathLib_SSEEnabled( void );
 bool MathLib_SSE2Enabled( void );

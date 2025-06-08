@@ -204,7 +204,7 @@ void *VoidFnPtrLookup_GlMgr(const char *fn, bool &okay, const bool bRequired, vo
 
 	// The SDL path would work on all these platforms, if we were using SDL there, too...
 #if defined(__EMSCRIPTEN__)
-	retval = dlsym( l_gles, fn );
+	retval = dlsym( l_egl, fn );
 #elif defined ANDROID || defined TOGLES
 	// SDL does the right thing, so we never need to use tier0 in this case.
 	if( _glGetProcAddress )
@@ -277,7 +277,7 @@ public:
 
 	// Get the next N events. The function returns the number of events that were filled into your array.
 	virtual int GetEvents( CCocoaEvent *pEvents, int nMaxEventsToReturn, bool debugEvents = false );
-#if defined(LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
+#ifdef USE_SDL
 	virtual int PeekAndRemoveKeyboardEvents( bool *pbEsc, bool *pbReturn, bool *pbSpace, bool debugEvent = false );
 #endif
 
@@ -609,14 +609,13 @@ InitReturnVal_t CSDLMgr::Init()
 
 
 #ifdef TOGLES
-#ifdef __EMSCRIPTEN__
+# ifdef __EMSCRIPTEN__
 	// use main binary for emscripten, because opengl linked statically to it
 	l_egl = dlopen("__main__", RTLD_LAZY);
-	l_gles = dlopen("__main__", RTLD_LAZY);
-#else
+# else
 	l_egl = dlopen("libEGL.so", RTLD_LAZY);
 	l_gles = dlopen("libGLESv3.so", RTLD_LAZY);
-#endif
+# endif
 
 	if( l_egl )
 	{
@@ -833,9 +832,6 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 #if defined( DX_TO_GL_ABSTRACTION )
 	flags |= SDL_WINDOW_OPENGL;
 #endif
-#ifdef __EMSCRIPTEN__
-	flags |= SDL_WINDOW_RESIZABLE;
-#endif
 	m_Window = SDL_CreateWindow( pTitle, x, y, width, height, flags );
 
 	if (m_Window == NULL)
@@ -1026,7 +1022,7 @@ int CSDLMgr::GetEvents( CCocoaEvent *pEvents, int nMaxEventsToReturn, bool debug
 	return nToWrite;
 }
 
-#if defined(LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
+#ifdef USE_SDL
 
 int CSDLMgr::PeekAndRemoveKeyboardEvents( bool *pbEsc, bool *pbReturn, bool *pbSpace, bool debugEvent )
 {
@@ -1186,11 +1182,10 @@ void CSDLMgr::OnFrameRendered()
 		SDL_SetWindowGrab( m_Window, bWindowGrab );
 		SDL_SetRelativeMouseMode( bRelativeMouseMode );
 #ifdef __EMSCRIPTEN__
-		if(bWindowGrab) {
+		if (bWindowGrab)
 			emscripten_request_pointerlock("canvas", true);
-		} else {
+		else
 			emscripten_exit_pointerlock();
-		}
 #endif
 
 		SDL_ShowCursor( m_bCursorVisible ? 1 : 0 );
@@ -1960,12 +1955,6 @@ void CSDLMgr::PumpWindowsMessageLoop()
 						}
 						break;
 					}
-#ifdef __EMSCRIPTEN__
-					case SDL_WINDOWEVENT_RESIZED:
-					{
-						printf("GOT RESIZE!!\n");
-					}
-#endif
 				}
 				break;
 

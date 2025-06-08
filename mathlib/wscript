@@ -25,7 +25,6 @@ def build(bld):
 		'sseconst.cpp',
 		'sse.cpp',	#				[$WINDOWS||$POSIX]
 		'ssenoise.cpp',				
-		'3dnow.cpp', #					[$WINDOWS||$LINUX]
 		'anorms.cpp',
 		'bumpvects.cpp',
 		'IceKey.cpp',
@@ -35,7 +34,6 @@ def build(bld):
 		'randsse.cpp',
 		'spherical.cpp',
 		'simdvectormatrix.cpp',
-		'vector.cpp',
 		'vmatrix.cpp',
 		'almostequal.cpp'
 	]

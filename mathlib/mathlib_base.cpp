@@ -22,10 +22,6 @@
 #include "mathlib/mathlib.h"
 #include "mathlib/vector.h"
 #if !defined( _X360 )
-#include "mathlib/amd3dx.h"
-#if !defined(OSX) && !defined(__EMSCRIPTEN__)
-#include "3dnow.h"
-#endif
 #include "sse.h"
 #endif
 
@@ -3219,13 +3215,14 @@ bool CalcLineToLineIntersectionSegment(
 
 #pragma optimize( "", on )
 
-static bool s_b3DNowEnabled = false;
 static bool s_bMMXEnabled = false;
 static bool s_bSSEEnabled = false;
 static bool s_bSSE2Enabled = false;
 
-void MathLib_Init( float gamma, float texGamma, float brightness, int overbright, bool bAllow3DNow, bool bAllowSSE, bool bAllowSSE2, bool bAllowMMX )
+void MathLib_Init( float gamma, float texGamma, float brightness, int overbright, bool bUnused, bool bAllowSSE, bool bAllowSSE2, bool bAllowMMX )
 {
+	(void)bUnused;
+
 	if ( s_bMathlibInitialized )
 		return;
 
@@ -3254,27 +3251,6 @@ void MathLib_Init( float gamma, float texGamma, float brightness, int overbright
 	else
 	{
 		s_bMMXEnabled = false;
-	}
-
-	// SSE Generally performs better than 3DNow when present, so this is placed 
-	// first to allow SSE to override these settings.
-#if !defined( OSX ) && !defined( PLATFORM_WINDOWS_PC64 ) && !defined(LINUX) && !defined(PLATFORM_BSD) && !defined(__EMSCRIPTEN__)
-	if ( bAllow3DNow && pi.m_b3DNow )
-	{
-		s_b3DNowEnabled = true;
-
-		// Select the 3DNow specific routines if available;
-		pfVectorNormalize = _3DNow_VectorNormalize;
-		pfVectorNormalizeFast = _3DNow_VectorNormalizeFast;
-		pfInvRSquared = _3DNow_InvRSquared;
-		pfSqrt = _3DNow_Sqrt;
-		pfRSqrt = _3DNow_RSqrt;
-		pfRSqrtFast = _3DNow_RSqrt;
-	}
-	else
-#endif
-	{
-		s_b3DNowEnabled = false;
 	}
 
 	if ( bAllowSSE && pi.m_bSSE )
@@ -3319,12 +3295,6 @@ void MathLib_Init( float gamma, float texGamma, float brightness, int overbright
 
 	InitSinCosTable();
 	BuildGammaTable( gamma, texGamma, brightness, overbright );
-}
-
-bool MathLib_3DNowEnabled( void )
-{
-	Assert( s_bMathlibInitialized );
-	return s_b3DNowEnabled;
 }
 
 bool MathLib_MMXEnabled( void )
