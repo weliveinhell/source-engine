@@ -2604,7 +2604,7 @@ void CL_SetPagedPoolInfo()
 
 void CL_SetSteamCrashComment()
 {
-	if ( IsX360() )
+	if ( IsX360() || IsWasm() )
 		return;
 
 	char map[ 80 ];

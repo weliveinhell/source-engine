@@ -567,7 +567,9 @@ void CAudioDeviceSDLAudio::StopAllSounds( void )
 void CAudioDeviceSDLAudio::ApplyDSPEffects( int idsp, portable_samplepair_t *pbuffront, portable_samplepair_t *pbufrear, portable_samplepair_t *pbufcenter, int samplecount )
 {
 	//SX_RoomFX( endtime, filter, timefx );
+#ifndef __EMSCRIPTEN__ // FIXME
 	DSP_Process( idsp, pbuffront, pbufrear, pbufcenter, samplecount );
+#endif
 }
 
 #endif // !DEDICATED

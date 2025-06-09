@@ -103,8 +103,10 @@ static CGameDLL_ConVarAccessor g_ConVarAccessor;
 // This gets called one time when the game is initialied
 void InitializeCvars( void )
 {
+#ifndef __EMSCRIPTEN__ // FIXME
 	// Register cvars here:
 	ConVar_Register( FCVAR_GAMEDLL, &g_ConVarAccessor ); 
 
 	g_pDeveloper	= cvar->FindVar( "developer" );
+#endif
 }

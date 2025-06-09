@@ -1367,7 +1367,7 @@ class GLMContext
 		void FlushDrawStatesNoShaders();
 				
 		// drawing
-#if 1 //ifndef OSX
+#ifndef __EMSCRIPTEN__ //ifndef OSX
 		FORCEINLINE void DrawRangeElements(	GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, uint baseVertex, CGLMBuffer *pIndexBuf );
 		void DrawRangeElementsNonInline(	GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, uint baseVertex, CGLMBuffer *pIndexBuf );
 #else
@@ -1817,7 +1817,7 @@ class GLMContext
 	CTSQueue<CGLMTex*> m_DeleteTextureQueue;
 };
 
-#if 1 //ifndef OSX
+#ifndef __EMSCRIPTEN__ //ifndef OSX
 
 FORCEINLINE void GLMContext::DrawRangeElements(	GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, uint baseVertex, CGLMBuffer *pIndexBuf )
 {
