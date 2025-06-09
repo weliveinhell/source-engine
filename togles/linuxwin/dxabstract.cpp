@@ -3893,7 +3893,7 @@ HRESULT IDirect3DDevice9::CreatePixelShader(CONST DWORD* pFunction,IDirect3DPixe
 		// Do this stuff if caps show m_needsFakeSRGB=true and the sRGBWrite state is true
 		// (but not if it's engine_post which is special)
 
-		if (!m_ctx->Caps().m_hasGammaWrites)
+		if (!m_ctx->Caps().m_hasGammaWrites || IsWasm())
 		{
 			if ( pShaderName )
 			{

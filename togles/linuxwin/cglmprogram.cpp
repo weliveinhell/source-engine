@@ -852,6 +852,11 @@ bool CGLMShaderPair::ValidateProgramPair()
 			m_locFragmentFakeSRGBEnable = gGL->glGetUniformLocation( m_program, "flSRGBWrite" );
 			m_fakeSRGBEnableValue = -1.0f;
 
+			#ifdef __EMSCRIPTEN__
+				m_fakeSRGBEnableValue = 1.0f;
+				gGL->glUniform1f(m_locFragmentFakeSRGBEnable, m_fakeSRGBEnableValue);
+			#endif
+
 			for (int sampler = 0; sampler < 16; sampler++)
 			{
 				char tmp[16];
