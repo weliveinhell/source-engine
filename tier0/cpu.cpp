@@ -22,7 +22,7 @@ const tchar* GetProcessorVendorId();
 
 static bool cpuid(uint32 function, uint32& out_eax, uint32& out_ebx, uint32& out_ecx, uint32& out_edx)
 {
-#if defined (__arm__) || defined (__aarch64__) || defined( _X360 ) || defined(__EMSCRIPTEN__)
+#if defined (__arm__) || defined (__aarch64__) || defined( _X360 ) || IsWasm()
 	return false;
 #elif defined(GNUC)
 
@@ -271,26 +271,6 @@ bool CheckSSE4aTechnology( void )
 }
 
 
-static bool Check3DNowTechnology(void)
-{
-#if defined( _X360 ) || defined( _PS3 ) || defined (__arm__) || defined(__SANITIZE_ADDRESS__) || (defined(PLATFORM_BSD) && defined(COMPILER_CLANG))
-	return false;
-#else
-	uint32 eax, unused;
-    if ( !cpuid(0x80000000,eax,unused,unused,unused) )
-		return false;
-
-    if ( eax > 0x80000000L )
-    {
-     	if ( !cpuid(0x80000001,unused,unused,unused,eax) )
-			return false;
-
-		return ( eax & 1<<31 ) != 0;
-    }
-    return false;
-#endif
-}
-
 static bool CheckCMOVTechnology()
 {
 #if defined( _X360 ) || defined( _PS3 ) || defined (__arm__) || defined(__SANITIZE_ADDRESS__)
@@ -376,7 +356,7 @@ const tchar* GetProcessorArchName()
         return "aarch64";
 #elif defined __arm__ || defined _M_ARM
         return "arm";
-#elif defined __EMSCRIPTEN__
+#elif IsWasm()
 	return "wasm32";
 #else
 #error "Unknown architecture"
@@ -609,7 +589,6 @@ const CPUInformation* GetCPUInformation()
 	pi.m_bSSE4a        = CheckSSE4aTechnology();
 	pi.m_bSSE41        = CheckSSE41Technology();
 	pi.m_bSSE42        = CheckSSE42Technology();
-	pi.m_b3DNow        = Check3DNowTechnology();
 	pi.m_szProcessorID = (tchar*)GetProcessorVendorId();
 	pi.m_bHT		   = HTSupported();
 

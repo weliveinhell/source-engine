@@ -588,8 +588,8 @@ int CSystem::GetAvailableDrives(char *buf, int bufLen)
 //-----------------------------------------------------------------------------
 double CSystem::GetFreeDiskSpace(const char *path)
 {
-#if defined(__EMSCRIPTEN__)
-	return (double) 2147483647;
+#if IsWasm()
+	return 0.0;
 #else
 #if __DARWIN_ONLY_64_BIT_INO_T || PLATFORM_BSD
     // MoeMod: newer macOS only support 64bit, so no statfs64 is provided

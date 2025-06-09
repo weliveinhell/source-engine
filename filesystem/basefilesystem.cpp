@@ -5046,7 +5046,7 @@ CSysModule *CBaseFileSystem::LoadModule( const char *pFileName, const char *pPat
 	CUtlSymbol lookup = g_PathIDTable.AddString( pPathID );
 
 	// a pathID has been specified, find the first match in the path list
-#ifndef ANDROID
+#if !defined(ANDROID) && !IsWasm()
 	int c = m_SearchPaths.Count();
 	for ( int i = 0; i < c; i++ )
 	{
@@ -5065,7 +5065,7 @@ CSysModule *CBaseFileSystem::LoadModule( const char *pFileName, const char *pPat
 			return pModule;
 		}
 
-#if defined(POSIX) && !defined(__EMSCRIPTEN__)
+#ifdef POSIX
 		Q_snprintf( tempPathID, sizeof(tempPathID), "%slib%s", m_SearchPaths[i].GetPathString(), pFileName ); // append the path to this dir.
 		pModule = Sys_LoadModule( tempPathID );
 		if ( pModule )

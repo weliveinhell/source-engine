@@ -3809,12 +3809,6 @@ void Host_InitProcessor( void )
 		else					   Q_strncat(szFeatureString, "(MMX) ", sizeof( szFeatureString ), COPY_ALL_CHARACTERS );
 	}
 
-	if( pi.m_b3DNow )
-	{
-		if( MathLib_3DNowEnabled() ) Q_strncat(szFeatureString, "3DNow ", sizeof( szFeatureString ), COPY_ALL_CHARACTERS );
-		else					   Q_strncat(szFeatureString, "(3DNow) ", sizeof( szFeatureString ), COPY_ALL_CHARACTERS );
-	}
-
 	if( pi.m_bRDTSC )	Q_strncat(szFeatureString, "RDTSC ", sizeof( szFeatureString ), COPY_ALL_CHARACTERS );
 	if( pi.m_bCMOV )	Q_strncat(szFeatureString, "CMOV ", sizeof( szFeatureString ), COPY_ALL_CHARACTERS );
 	if( pi.m_bFCMOV )	Q_strncat(szFeatureString, "FCMOV ", sizeof( szFeatureString ), COPY_ALL_CHARACTERS );

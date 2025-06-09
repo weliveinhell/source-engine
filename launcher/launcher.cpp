@@ -1560,7 +1560,7 @@ DLL_EXPORT int LauncherMain( int argc, char **argv )
 		RegCloseKey(hKey);
 	}
 
-#elif defined( OSX ) || defined( LINUX ) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
+#elif defined(POSIX) && !defined(ANDROID) && !IsWasm()
 	struct stat st;
 	if ( stat( RELAUNCH_FILE, &st ) == 0 ) 
 	{
@@ -1588,9 +1588,6 @@ DLL_EXPORT int LauncherMain( int argc, char **argv )
 			unlink( RELAUNCH_FILE );
 		}
 	}
-#elif defined( _X360 )
-#else
-#error
 #endif
 
 	return 0;

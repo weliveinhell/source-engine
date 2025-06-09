@@ -120,8 +120,8 @@ def build(bld):
 		'enginethreads.cpp',
 		'enginetrace.cpp',
 		'filesystem_engine.cpp',
-		#'../public/filesystem_helpers.cpp', # defined in vgui2/vgui_controls/libvgui_controls.a
-		#'../public/filesystem_init.cpp', # defined in appframework/libappframework.a
+		'../public/filesystem_helpers.cpp',
+		'../public/filesystem_init.cpp',
 		'filetransfermgr.cpp',
 		'GameEventManager.cpp',
 		'GameEventManagerOld.cpp',
@@ -173,7 +173,7 @@ def build(bld):
 		'staticpropmgr.cpp',
 		'../public/studio.cpp',
 		'sys_dll.cpp',
-		'sys_dll2.cpp', # defined in appframework/libappframework.a
+		'sys_dll2.cpp',
 		'sys_engine.cpp',
 		'testscriptmgr.cpp',
 		'traceinit.cpp',
@@ -283,7 +283,6 @@ def build(bld):
 			'replaydemoplayer.cpp',
 			'Session.cpp',
 			'sys_mainwind.cpp',
-			'bugreporter.cpp',
 			'download.cpp',
 			'host_saverestore.cpp',
 			'lightcache.cpp',

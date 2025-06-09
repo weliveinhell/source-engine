@@ -2422,7 +2422,7 @@ FORCEINLINE i32x4 IntShiftLeftWordSIMD(const i32x4 &vSrcA, const i32x4 &vSrcB)
 // like this.
 FORCEINLINE void ConvertStoreAsIntsSIMD(intx4 * RESTRICT pDest, const fltx4 &vSrc)
 {
-#if defined( COMPILER_MSVC64 ) || defined(__EMSCRIPTEN__)
+#if defined( COMPILER_MSVC64 ) || IsWasm()
 
 	(*pDest)[0] = SubFloat( vSrc, 0 );
 	(*pDest)[1] = SubFloat( vSrc, 1 );

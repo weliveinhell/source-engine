@@ -4901,7 +4901,7 @@ static inline uint GetDataTypeSizeInBytes( GLenum dataType )
 	return 0;
 }
 
-#ifndef __EMSCRIPTEN__ //ifndef OSX
+#if 1 //ifndef OSX
 
 void GLMContext::DrawRangeElementsNonInline( GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const GLvoid *indices, uint baseVertex, CGLMBuffer *pIndexBuf )
 {

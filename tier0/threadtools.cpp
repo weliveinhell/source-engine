@@ -26,22 +26,19 @@
 	#include <sys/time.h>
 	#define GetLastError() errno
 	typedef void *LPVOID;
-#if !defined(OSX)
-        #include <fcntl.h>
-        #include <unistd.h>
-	#define sem_unlink( arg )
-	#define OS_TO_PTHREAD(x) (x)
-#else
+#if defined(OSX)
 	#define pthread_yield pthread_yield_np
 	#include <mach/thread_act.h>
 	#include <mach/mach.h>
 	#define OS_TO_PTHREAD(x) pthread_from_mach_thread_np( x )
+#elif defined(PLATFORM_BSD)
+	#define OS_TO_PTHREAD(x) (pthread_t)(x)
+#else
+        #include <fcntl.h>
+        #include <unistd.h>
+	#define sem_unlink( arg )
+	#define OS_TO_PTHREAD(x) (x)
 #endif // !OSX
-
-#ifdef PLATFORM_BSD
-# undef OS_TO_PTRHEAD
-# define OS_TO_PTHREAD(x) (pthread_t)(x)
-#endif
 
 #endif
 
@@ -1627,7 +1624,6 @@ bool CThreadFullMutex::Release()
 //
 //-----------------------------------------------------------------------------
 
-#if defined( WIN32 ) || defined( _PS3 ) || defined( _OSX ) || defined (_LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
 #if !defined(_PS3)
 namespace GenericThreadLocals
 {
@@ -1690,7 +1686,6 @@ void CThreadLocalBase::Set( void *value )
 #if !defined(_PS3)
 } // namespace GenericThreadLocals
 #endif
-#endif // ( defined(WIN32) ) 
 //-----------------------------------------------------------------------------
 
 
@@ -1853,7 +1848,7 @@ bool ThreadInterlockedAssignIf128( volatile int128 *pDest, const int128 &value, 
 }
 #endif
 
-#elif defined(GNUC) || defined(__EMSCRIPTEN__)
+#elif defined(GNUC)
 
 #ifdef OSX
 #include <libkern/OSAtomic.h>

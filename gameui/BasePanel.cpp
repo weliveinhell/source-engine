@@ -2343,16 +2343,13 @@ void CBasePanel::RunMenuCommand(const char *command)
 
 				RegCloseKey(hKey);
 			}
-#elif defined( OSX ) || defined( LINUX ) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
+#elif defined(POSIX) && !defined(ANDROID) && !IsWasm()
 			FILE *fp = fopen( "/tmp/hl2_relaunch", "w+" );
 			if ( fp )
 			{
 				fprintf( fp, "%s\n", szSteamURL );
 			}
 			fclose( fp );
-#elif defined( _X360 )
-#else
-#error
 #endif
 		}
 	}

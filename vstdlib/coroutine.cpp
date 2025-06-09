@@ -230,8 +230,6 @@ extern "C" byte *GetStackPtr64();
 //#endif
 #elif defined(__SNC__)
 #define GetStackPtr( pStackPtr )	byte *pStackPtr = (byte*)__builtin_frame_address(0)
-#elif defined(__EMSCRIPTEN__)
-#define GetStackPtr( pStackPtr )	byte *pStackPtr = (byte*)__builtin_frame_address(0)
 #else
 #error
 #endif

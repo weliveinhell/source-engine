@@ -24,13 +24,6 @@
 	#include <winsock.h>
 #elif defined(_X360)
 	// nothing to include for 360
-#elif defined(OSX)
-#elif defined(LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
-	#include "tier0/dynfunction.h"
-#elif defined(_WIN32)
-	#include "tier0/dynfunction.h"
-#else
-	#error
 #endif
 #include "appframework/ilaunchermgr.h"
 
@@ -842,10 +835,6 @@ LRESULT CGame::WindowProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     // return 0 if handled message, 1 if not
     return lRet;
 }
-#elif defined(OSX) || defined(LINUX) || defined(_WIN32) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
-
-#else
-#error
 #endif
 
 
@@ -1259,8 +1248,7 @@ void CGame::InputDetachFromGameWindow()
 
 void CGame::PlayStartupVideos( void )
 {
-#ifndef __EMSCRIPTEN__
-	if ( IsX360() || Plat_IsInBenchmarkMode() )
+	if ( IsX360() || IsWasm() || Plat_IsInBenchmarkMode() )
 		return;
 
 #ifndef SWDS
@@ -1360,7 +1348,6 @@ void CGame::PlayStartupVideos( void )
 	free( (void *)buffer );
 
 #endif // SWDS
-#endif // __EMSCRIPTEN__
 }
 
 //-----------------------------------------------------------------------------
@@ -1561,9 +1548,7 @@ void *CGame::GetMainWindowPlatformSpecificHandle( void )
 {
 #ifdef WIN32
 	return (void*)m_hWindow;
-#elif defined(__EMSCRIPTEN__)
-	return NULL;
-#else
+#elif defined(OSX)
 	SDL_SysWMinfo pInfo;
 	SDL_VERSION( &pInfo.version );
 	if ( !SDL_GetWindowWMInfo( (SDL_Window*)m_pSDLWindow, &pInfo ) )
@@ -1572,7 +1557,6 @@ void *CGame::GetMainWindowPlatformSpecificHandle( void )
 		return NULL;
 	}
 
-#ifdef OSX
 	id nsWindow = (id)pInfo.info.cocoa.window;
 	SEL selector = sel_registerName("windowRef");
 	id windowRef = ((id(*)(id, SEL))objc_msgSend)( nsWindow, selector );
@@ -1581,8 +1565,6 @@ void *CGame::GetMainWindowPlatformSpecificHandle( void )
 	// Not used on Linux.
 	return NULL;
 #endif
-
-#endif // !WIN32
 }
 
 

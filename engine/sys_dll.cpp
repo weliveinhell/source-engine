@@ -712,7 +712,7 @@ void Sys_InitMemory( void )
 		}
 	}
 #elif defined(__EMSCRIPTEN__)
-	memsize = 0xFFFFFFFFUL;
+	memsize = 2 * 1073741824UL; // 2GB
 #else
 #error Write me.
 #endif

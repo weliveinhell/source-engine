@@ -24,8 +24,7 @@
 #if defined( _WIN32 ) && !defined( _X360 )
 #define WIN32_LEAN_AND_MEAN
 #include <winsock.h>
-#endif
-#if defined(LINUX) || defined(PLATFORM_BSD) || defined(__EMSCRIPTEN__)
+#elif defined(POSIX)
 #include <arpa/inet.h>
 #endif
 

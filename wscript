@@ -266,6 +266,14 @@ def define_platform(conf):
 			'_DLL_EXT=.so'
 		])
 
+	elif conf.env.DEST_OS == 'wasm':
+		conf.env.append_unique('DEFINES', [
+			'POSIX=1', '_POSIX=1', 'PLATFORM_POSIX=1',
+			'GNUC',
+			'NO_HOOK_MALLOC',
+			'_DLL_EXT=.so'
+		])
+
 	if conf.env.DEST_OS != 'win32':
 		conf.define('NO_MEMOVERRIDE_NEW_DELETE', 1)
 #		conf.define('NO_MALLOC_OVERRIDE', 1)
@@ -278,9 +286,6 @@ def define_platform(conf):
 		conf.env.append_unique('DEFINES', [
 			'NDEBUG'
 		])
-
-	conf.define('GIT_COMMIT_HASH', conf.env.GIT_VERSION)
-
 
 def options(opt):
 	grp = opt.add_option_group('Common options')
@@ -333,7 +338,9 @@ def options(opt):
 	opt.load('reconfigure')
 
 def check_deps(conf):
-	if conf.env.DEST_OS != 'win32':
+	if conf.env.DEST_OS == 'wasm':
+		pass # Skip these libraries
+	elif conf.env.DEST_OS != 'win32':
 		conf.check_cc(lib='dl', mandatory=False)
 		conf.check_cc(lib='bz2', mandatory=True)
 		conf.check_cc(lib='rt', mandatory=False)
@@ -387,21 +394,22 @@ def check_deps(conf):
 		return
 
 	if conf.env.DEST_OS != 'android':
-		if conf.env.DEST_OS != 'win32':
+		if conf.env.DEST_OS not in ['wasm', 'win32']:
 			if conf.options.SDL:
 				conf.check_cfg(package='sdl2', uselib_store='SDL2', args=['--cflags', '--libs'])
 			if conf.options.DEDICATED:
 				conf.check_cfg(package='libedit', uselib_store='EDIT', args=['--cflags', '--libs'])
 			else:
 				conf.check_pkg('freetype2', 'FT2', FT2_CHECK)
-				#conf.check_pkg('fontconfig', 'FC', FC_CHECK)
+				conf.check_pkg('fontconfig', 'FC', FC_CHECK)
+
 				if conf.env.DEST_OS == "darwin":
 					conf.env.FRAMEWORK_OPENAL = "OpenAL"
 				else:
 					conf.check_cfg(package='openal', uselib_store='OPENAL', args=['--cflags', '--libs'])
 				conf.check_cfg(package='libjpeg', uselib_store='JPEG', args=['--cflags', '--libs'])
 				conf.check_cfg(package='libpng', uselib_store='PNG', args=['--cflags', '--libs'])
-				#conf.check_cfg(package='libcurl', uselib_store='CURL', args=['--cflags', '--libs'])
+				conf.check_cfg(package='libcurl', uselib_store='CURL', args=['--cflags', '--libs'])
 			conf.check_cfg(package='zlib', uselib_store='ZLIB', args=['--cflags', '--libs'])
 
 			if conf.options.OPUS:
@@ -458,6 +466,9 @@ def configure(conf):
 	elif conf.env.DEST_OS == 'darwin':
 		conf.load('mm_hook')
 
+	if conf.env.DEST_CPU in ['wasm32', 'wasm64']:
+		conf.env.DEST_OS = 'wasm'
+
 	conf.env.BIT32_MANDATORY = conf.options.TARGET32
 	if conf.env.BIT32_MANDATORY:
 		Logs.info('WARNING: will build engine for 32-bit target')
@@ -508,7 +519,9 @@ def configure(conf):
 		flags += ['-fsanitize=%s'%conf.options.SANITIZE, '-fno-sanitize=vptr']
 
 	if conf.env.DEST_OS != 'win32':
-		flags += ['-pipe', '-fPIC', '-L'+os.path.abspath('.')+'/lib/'+conf.env.DEST_OS+'/'+conf.env.DEST_CPU+'/']
+		flags += ['-pipe', '-fPIC']
+		if conf.env.DEST_OS in ['android']:
+			flags += ['-L'+os.path.abspath('.')+'/lib/'+conf.env.DEST_OS+'/'+conf.env.DEST_CPU+'/']
 	if conf.env.COMPILER_CC != 'msvc':
 		flags += ['-pthread']
 
@@ -524,7 +537,7 @@ def configure(conf):
 		]
 
 		flags += ['-funwind-tables', '-g']
-	elif conf.env.COMPILER_CC != 'msvc' and conf.env.DEST_OS != 'darwin' and conf.env.DEST_CPU in ['x86', 'x86_64']:
+	elif conf.env.COMPILER_CC != 'msvc' and conf.env.DEST_OS not in ['darwin', 'freebsd'] and conf.env.DEST_CPU in ['x86', 'x86_64']:
 		flags += ['-march=core2']
 
 	if conf.env.DEST_CPU in ['x86', 'x86_64']:
@@ -534,6 +547,15 @@ def configure(conf):
 
 	if conf.env.DEST_CPU == 'arm':
 		flags += ['-march=armv7-a', '-mfpu=neon-vfpv4']
+
+	if conf.options.EMSCRIPTEN:
+		if conf.options.BUILD_TYPE == 'debug':
+			linkflags += ['-gsource-map', '--source-map-base', 'https://localhost/build/install/'] # '-sSOURCE_MAP_PREFIXES=/=../../'
+
+		flags += ['-sSHARED_MEMORY=1', '-msimd128', '-msse']
+		flags += ['-sUSE_BZIP2=1', '-sUSE_SDL=2', '-sUSE_FREETYPE=1', '-sUSE_LIBJPEG=1', '-sUSE_LIBPNG']
+		linkflags += ['-sSIDE_MODULE=1', '-Wl,--allow-multiple-definition']
+		flags += ['-sFULL_ES3', '-sMALLOC=mimalloc']
 
 	if conf.env.DEST_OS == 'freebsd':
 		linkflags += ['-lexecinfo']
@@ -604,13 +626,6 @@ def configure(conf):
 		cxxflags += conf.filter_cxxflags(compiler_optional_flags, cflags)
 		cflags += conf.filter_cflags(compiler_optional_flags + c_compiler_optional_flags, cflags)
 
-	# '-g', '-gsource-map', '--source-map-base', 'https://localhost/projects/source-engine/build/install/usr/local/', '-sSOURCE_MAP_PREFIXES=/=../../../../../'
-	if conf.options.EMSCRIPTEN:
-		all_flags = ['-sSHARED_MEMORY=1', '-sUSE_PTHREADS', '-sFULL_ES3']
-		linkflags += ['-sSIDE_MODULE', '-Wl,--allow-multiple-definition'] + all_flags
-		cflags += ['-D_DLL_EXT=.so'] + all_flags
-		cxxflags += ['-D_DLL_EXT=.so'] + all_flags
-
 	conf.env.append_unique('CFLAGS', cflags)
 	conf.env.append_unique('CXXFLAGS', cxxflags)
 	conf.env.append_unique('LINKFLAGS', linkflags)
@@ -619,7 +634,7 @@ def configure(conf):
 	check_deps( conf )
 
 	# indicate if we are packaging for Linux/BSD
-	if conf.env.DEST_OS != 'android':
+	if conf.env.DEST_OS not in ['android', 'wasm']:
 		conf.env.LIBDIR = conf.env.PREFIX+'/bin/'
 		conf.env.TESTDIR = conf.env.PREFIX+'/tests/'
 		conf.env.BINDIR = conf.env.PREFIX

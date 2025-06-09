@@ -952,9 +952,7 @@ public:
 	// Reset the map we're on
 	virtual void SetMap( const char *pMapName );
 
-#ifdef __EMSCRIPTEN__
-	bool MainLoopIter();
-#endif
+	ThreeState_t MainLoopIter();
 	bool MainLoop();
 
 	int RunListenServer();
@@ -1501,80 +1499,79 @@ void StopGProfiler()
 }
 
 #ifdef __EMSCRIPTEN__
-void em_loop_iteration() {
-	s_EngineAPI.MainLoopIter();
+void em_loop_iteration()
+{
+	ThreeState_t state = s_EngineAPI.MainLoopIter();
+	(void)state;
+	// TODO: Restart on TRS_TRUE or just quit on TRS_FALSE
 }
 
-bool CEngineAPI::MainLoop() {
+bool CEngineAPI::MainLoop()
+{
 	emscripten_set_main_loop(em_loop_iteration, 0, true);
 	return false; // this should never happen, emscripten should throw an exception after set_main_loop was called
+}
+#else
+bool CEngineAPI::MainLoop()
+{
+	// Main message pump
+	while ( true )
+	{
+		ThreeState_t state = MainLoopIter();
+		if (state != TRS_NONE)
+			return state;
+	}
 }
 #endif
 
 //-----------------------------------------------------------------------------
 // Purpose: Message pump
 //-----------------------------------------------------------------------------
-#ifdef __EMSCRIPTEN__
 static bool bIdle = true; // FIXME?
 static long lIdleCount = 0;
 
-bool CEngineAPI::MainLoopIter()
-#else
-bool CEngineAPI::MainLoop()
+ThreeState_t CEngineAPI::MainLoopIter()
 {
-	bool bIdle = true;
-	long lIdleCount = 0;
-
-	// Main message pump
-	while ( true )
-#endif
+	// Pump messages unless someone wants to quit
+	if ( eng->GetQuitting() != IEngine::QUIT_NOTQUITTING )
 	{
-		// Pump messages unless someone wants to quit
-		if ( eng->GetQuitting() != IEngine::QUIT_NOTQUITTING )
-		{
-			// We have to explicitly stop the profiler since otherwise symbol
-			// resolution doesn't work correctly.
-			StopGProfiler();
-			if ( eng->GetQuitting() != IEngine::QUIT_TODESKTOP )
-				return true;
-			return false;
-		}
-
-		// Pump the message loop
-		if ( !InEditMode() )
-		{
-			PumpMessages();
-		}
-		else
-		{
-			PumpMessagesEditMode( bIdle, lIdleCount );
-		}
-
-		// Run engine frame + hammer frame
-		if ( !InEditMode() || m_hEditorHWnd )
-		{
-			VCRSyncToken( "Frame" );
-
-		// Deactivate edit mode shaders
-		ActivateEditModeShaders( false );
-
-		eng->Frame();
-
-		// Reactivate edit mode shaders (in Edit mode only...)
-		ActivateEditModeShaders( true );
-		}
-
-		if ( InEditMode() )
-		{
-			g_pHammer->RunFrame();
-		}
-#ifdef __EMSCRIPTEN__
-		return false;
-#else
+		// We have to explicitly stop the profiler since otherwise symbol
+		// resolution doesn't work correctly.
+		StopGProfiler();
+		if ( eng->GetQuitting() != IEngine::QUIT_TODESKTOP )
+			return TRS_TRUE;
+		return TRS_FALSE;
 	}
 
-	return false;
-#endif
+	// Pump the message loop
+	if ( !InEditMode() )
+	{
+		PumpMessages();
+	}
+	else
+	{
+		PumpMessagesEditMode( bIdle, lIdleCount );
+	}
+
+	// Run engine frame + hammer frame
+	if ( !InEditMode() || m_hEditorHWnd )
+	{
+		VCRSyncToken( "Frame" );
+
+	// Deactivate edit mode shaders
+	ActivateEditModeShaders( false );
+
+	eng->Frame();
+
+	// Reactivate edit mode shaders (in Edit mode only...)
+	ActivateEditModeShaders( true );
+	}
+
+	if ( InEditMode() )
+	{
+		g_pHammer->RunFrame();
+	}
+	return TRS_NONE;
 }
 
 

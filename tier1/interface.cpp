@@ -309,18 +309,6 @@ bool foundLibraryWithPrefix( char *pModuleAbsolutePath, size_t AbsolutePathSize,
 
 #endif
 
-#ifdef __EMSCRIPTEN__
-
-bool string_endsWith(const char *str, const char *suffix) {
-    size_t str_len = strlen(str);
-    size_t suffix_len = strlen(suffix);
-    
-    if (suffix_len > str_len) return false;
-    return strcmp(str + (str_len - suffix_len), suffix) == 0;
-}
-
-#endif
-
 //-----------------------------------------------------------------------------
 // Purpose: Loads a DLL/component from disk and returns a handle to it
 // Input  : *pModuleName - filename of the component
@@ -328,32 +316,6 @@ bool string_endsWith(const char *str, const char *suffix) {
 //-----------------------------------------------------------------------------
 CSysModule *Sys_LoadModule( const char *pModuleName, Sys_Flags flags /* = SYS_NOFLAGS (0) */ )
 {
-	HMODULE hDLL = NULL;
-
-#ifdef __EMSCRIPTEN__
-	// we've already told emscripten to link these libs, so there is no need to specify real path
-	// also we should sanitize library names, because i'm too lazy to dig through all the sources to hand-modify them
-
-	char szModuleName[1024] = { 0 };
-	char fmtBuf[1024] = "lib%s";
-
-#define EAT(prefix) if(strncmp(pModuleName, prefix, strlen(prefix)) == 0) pModuleName += strlen(prefix)
-	EAT("/"); EAT("bin"); EAT("/"); EAT("lib");
-#undef EAT
-
-	if(!string_endsWith(pModuleName, ".so")) { // FIXME: we should delete it?
-		strcat(fmtBuf, ".so");
-	}
-
-	Q_snprintf(szModuleName, sizeof(szModuleName), fmtBuf, pModuleName);
-	Msg("LoadLibrary: path: %s\n", szModuleName);
-
-	hDLL = (HMODULE)dlopen( szModuleName, RTLD_NOW );
-	if(!hDLL) {
-		Warning("Can't find module - %s\n", pModuleName);
-	}
-#else
-
 	// If using the Steam filesystem, either the DLL must be a minimum footprint
 	// file in the depot (MFP) or a filesystem GetLocalCopy() call must be made
 	// prior to the call to this routine.
@@ -361,6 +323,7 @@ CSysModule *Sys_LoadModule( const char *pModuleName, Sys_Flags flags /* = SYS_NO
 #ifdef POSIX
 	char szModuleName[1024] = { 0 };
 #endif
+	HMODULE hDLL = NULL;
 
 	if ( !Q_IsAbsolutePath( pModuleName ) )
 	{
@@ -499,7 +462,7 @@ CSysModule *Sys_LoadModule( const char *pModuleName, Sys_Flags flags /* = SYS_NO
 		}
 	}
 #endif
-#endif
+
 	return reinterpret_cast<CSysModule *>(hDLL);
 }
 
