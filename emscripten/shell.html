@@ -3,18 +3,29 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Emscripten-Generated Code</title>
+    <title>yikes!</title>
     <style>{{{ SHELL_CSS }}}</style>
+	<style>
+		body {
+			background: #111;
+		}
+
+		body #emscripten_logo {
+			width: 200px;
+		}
+
+		body #status {
+			color: #fff;
+		}
+	</style>
   </head>
   <body>
-    <a href="http://emscripten.org">{{{ SHELL_LOGO }}}</a>
+    <a href="http://emscripten.org"><img id="emscripten_logo" src="assets/portal.svg"></a>
 
     <div class="spinner" id='spinner'></div>
     <div class="emscripten" id="status">Downloading...</div>
 
     <span id='controls'>
-      <span><input type="checkbox" id="resize">Resize canvas</span>
-      <span><input type="checkbox" id="pointerLock" checked>Lock/hide mouse pointer &nbsp;&nbsp;&nbsp;</span>
       <span><input type="button" value="Fullscreen" onclick="Module.requestFullscreen(document.getElementById('pointerLock').checked, 
                                                                                 document.getElementById('resize').checked)">
       </span>

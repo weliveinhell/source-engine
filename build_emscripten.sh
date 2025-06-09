@@ -32,7 +32,7 @@ emcc \
 	-sFULL_ES3 -sSTACK_SIZE=4mb -sEXPORTED_RUNTIME_METHODS=requestFullscreen --shell-file=emscripten/shell.html \
 	--preload-file=__game_data/game@/ \
 	$preload_libs \
-	--pre-js emscripten/pre.js \
+	--pre-js emscripten/pre.js --post-js emscripten/post.js \
 	-L build/install/usr/local/bin/ \
 	build/launcher_main/libhl2_launcher.a \
 	$link_libs \
@@ -40,3 +40,4 @@ emcc \
 
 cp build/launcher_main/hl2_launcher.* build/install/usr/local/
 cp build/install/usr/local/bin/*.so build/install/usr/local/
+cp -r emscripten/assets/ build/install/usr/local/assets
