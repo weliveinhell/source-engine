@@ -2016,6 +2016,9 @@ void CShaderAPIDx8::ClearStdTextureHandles( void )
 //-----------------------------------------------------------------------------
 bool CShaderAPIDx8::OnAdapterSet()
 {
+#ifdef __EMSCRIPTEN__
+	SetCurrentThreadAsOwner(); // proxy to pthread fix
+#endif
 	if ( !DetermineHardwareCaps( ) )
 		return false;
 

@@ -50,6 +50,10 @@
 #include "replay/iserverengine.h"
 #include "vcrmode.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -608,6 +612,21 @@ public:
 	// CanProvideLevel/PrepareLevelResources
 	virtual eFindMapResult FindMap( /* in/out */ char *pMapName, int nMapNameMax )
 	{
+#ifdef __EMSCRIPTEN__
+		int lock = 1;
+	
+		// post message to the main thread to download map if it's missing
+		EM_ASM({
+			postMessage({
+				cmd: 'callHandler',
+				handler: 'downloadMap',
+				args: [ $0 / 4, UTF8ToString($1) ]
+			})
+		}, &lock, pMapName);
+	
+		// then lock current thread
+		__builtin_wasm_memory_atomic_wait32(&lock, 1, -1);
+#endif
 		char szOriginalName[256] = { 0 };
 		V_strncpy( szOriginalName, pMapName, sizeof( szOriginalName ) );
 

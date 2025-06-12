@@ -1226,6 +1226,10 @@ DLL_EXPORT int LauncherMain( int argc, char **argv )
 
 #endif // LINUX
 
+#ifdef __EMSCRIPTEN__
+	DeclareCurrentThreadIsMainThread();
+#endif
+
 #ifdef USE_SDL
 	SDL_version ver;
 	SDL_GetVersion( &ver );

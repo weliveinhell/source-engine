@@ -6,4 +6,9 @@
 	window.addEventListener('beforeunload', function (event) {
 		event.preventDefault()
 	})
+
+	addRunDependency('load_game_data')
+	dataLoader.loadMapCached('background1').then(x => {
+		removeRunDependency('load_game_data')
+	})
 })();

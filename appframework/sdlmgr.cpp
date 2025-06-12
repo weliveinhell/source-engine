@@ -861,9 +861,25 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 #endif
 
 #if defined( DX_TO_GL_ABSTRACTION )
+#ifdef __EMSCRIPTEN__
+	EmscriptenWebGLContextAttributes em_attrs;
+	emscripten_webgl_init_context_attributes(&em_attrs);
+	em_attrs.alpha = false;
+	em_attrs.antialias = false;
+	em_attrs.majorVersion = 2;
+
+	m_GLContext = (void*) emscripten_webgl_create_context("#canvas", &em_attrs);
+
+	if (m_GLContext == NULL)
+		Error( "Failed to create WebGL context" );
+
+	emscripten_webgl_make_context_current((EMSCRIPTEN_WEBGL_CONTEXT_HANDLE) m_GLContext);
+#else
 	m_GLContext = SDL_GL_CreateContext(m_Window);
+
 	if (m_GLContext == NULL)
 		Error( "Failed to create GL context: %s", SDL_GetError() );
+#endif
 
 	SDL_GL_MakeCurrent(m_Window, m_GLContext);
 

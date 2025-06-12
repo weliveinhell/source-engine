@@ -1151,6 +1151,8 @@ void CBaseServer::CalculateCPUUsage( void )
 			memcpy(&lastTotalTime,&totalTime,sizeof(__int64));
 			lastAvg=m_fLastCPUCheckTime;
 		}
+#elif defined(__EMSCRIPTEN__)
+		// do nothing
 #elif defined ( POSIX )
 		static struct rusage s_lastUsage;
 		static float s_lastAvg = 0;
