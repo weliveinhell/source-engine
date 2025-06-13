@@ -1196,8 +1196,21 @@ public:
 
 	FSAsyncStatus_t AsyncWrite( const char *pFileName, const void *pSrc, int nSrcBytes, bool bFreeMemory, bool bAppend, FSAsyncControl_t *pControl )
 	{
-		SaveMsg( "AsyncWrite (%s/%d)...\n", pFileName, nSrcBytes );
-		return g_pFileSystem->AsyncWrite( pFileName, pSrc, nSrcBytes, bFreeMemory, bAppend, pControl );
+		#ifdef __EMSCRIPTEN__
+			// some wierd stuff is happening with save extensions (.hl1, .hl2, .hl3)
+			// they are written in uppercase, but read in lowercase
+			// i think it should be consistent HUH???
+
+			char filenameNorm[MAX_PATH];
+			Q_strncpy( filenameNorm, pFileName, sizeof( filenameNorm ) );
+			if(strncmp(filenameNorm, "//MOD/", 6) == 0)
+				Q_strlower(filenameNorm + 6);
+			SaveMsg( "AsyncWrite (%s/%d)...\n", filenameNorm, nSrcBytes );
+			return g_pFileSystem->AsyncWrite( filenameNorm, pSrc, nSrcBytes, bFreeMemory, bAppend, pControl );
+		#else
+			SaveMsg( "AsyncWrite (%s/%d)...\n", pFileName, nSrcBytes );
+			return g_pFileSystem->AsyncWrite( pFileName, pSrc, nSrcBytes, bFreeMemory, bAppend, pControl );
+		#endif
 	}
 
 	void Seek( FileHandle_t hFile, int pos, FileSystemSeek_t method )

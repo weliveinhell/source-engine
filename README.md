@@ -5,9 +5,8 @@ discord: https://discord.gg/2kgxEREY6g
 
 ## list of broken stuff
 + sound
-+ saving/loading
++ saving/loading (works, TODO: save to browser storage)
 + sometimes render breaks (something related to lightmaps?)
-+ level transition
 + fullscreen html button (works through game settings)
 + todo: preaload maps in background
 

@@ -648,9 +648,6 @@ static ConVar save_asyncdelay( "save_asyncdelay", "0", 0, "For testing, adds thi
 //-----------------------------------------------------------------------------
 int CSaveRestore::SaveGameSlot( const char *pSaveName, const char *pSaveComment, bool onlyThisLevel, bool bSetMostRecent, const char *pszDestMap, const char *pszLandmark )
 {
-#ifdef __EMSCRIPTEN__
-	return 0; // FIXME
-#endif
 	if ( save_disable.GetBool()  )
 	{
 		return 0;
@@ -3270,7 +3267,7 @@ void CSaveRestore::Init( void )
 	}
 	m_nDeferredCommandFrames = 0;
 	m_szSaveGameScreenshotFile[0] = 0;
-#ifndef __EMSCRIPTEN__ // FIXME
+
 	if ( !serverGameClients || 
 		( minplayers == 1 ) )
 	{
@@ -3297,7 +3294,6 @@ void CSaveRestore::Init( void )
 	{
 		ClearSaveDir();
 	}
-#endif
 }
 
 //-----------------------------------------------------------------------------
