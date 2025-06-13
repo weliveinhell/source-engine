@@ -9,12 +9,50 @@ Module['arguments'].push(
 )
 
 class DataLoader {
+	mapsOrdered = [
+		'background1',
+		'testchmb_a_00',
+		'testchmb_a_01',
+		'testchmb_a_02',
+		'testchmb_a_03',
+		'testchmb_a_04',
+		'testchmb_a_05',
+		'testchmb_a_06',
+		'testchmb_a_07',
+		'testchmb_a_08',
+		'testchmb_a_09',
+		'testchmb_a_10',
+		'testchmb_a_11',
+		'testchmb_a_13',
+		'testchmb_a_14',
+		'testchmb_a_15'
+	]
+
 	loadedMaps = {}
 
+	async loadMapWithDeps(mapName) {
+		const index = this.mapsOrdered.indexOf(mapName)
+		if(index === -1) {
+			throw new Error(`no such map: ${mapName}`)
+		}
+
+		// load past maps and current one
+		for(let i = 0; i < index + 1; i++) {
+			await this.loadMapCached(mapName)
+		}
+
+		// schedule next map if it exists
+		const next = this.mapsOrdered[index + 1]
+		if(next) {
+			this.loadMapCached(next)
+		}
+	}
+
 	async loadMapCached(mapName) {
-		if(mapName in this.loadedMaps) return
-		await this.loadMap(mapName)
-		this.loadedMaps[mapName] = true
+		if(mapName in this.loadedMaps) return this.loadedMaps[mapName]
+		const promise = this.loadMap(mapName)
+		this.loadedMaps[mapName] = promise
+		return promise
 	}
 
 	async setProgress(mapName, progress) {
@@ -85,7 +123,7 @@ class DataLoader {
 const dataLoader = new DataLoader()
 
 Module.downloadMap = (lock, mapName) => {
-	dataLoader.loadMapCached(mapName).then(() => {
+	dataLoader.loadMapWithDeps(mapName).then(() => {
 		Atomics.store(HEAP32, lock, 0)
 		Atomics.notify(HEAP32, lock)
 	})

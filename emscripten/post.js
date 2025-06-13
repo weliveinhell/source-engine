@@ -7,8 +7,10 @@
 		event.preventDefault()
 	})
 
+	canvasElement.onkeypress = e => e.preventDefault()
+
 	addRunDependency('load_game_data')
-	dataLoader.loadMapCached('background1').then(x => {
+	dataLoader.loadMapWithDeps('background1').then(x => {
 		removeRunDependency('load_game_data')
 	})
 })();
