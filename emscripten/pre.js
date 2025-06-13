@@ -38,7 +38,7 @@ class DataLoader {
 
 		// load past maps and current one
 		for(let i = 0; i < index + 1; i++) {
-			await this.loadMapCached(mapName)
+			await this.loadMapCached(this.mapsOrdered[i])
 		}
 
 		// schedule next map if it exists
