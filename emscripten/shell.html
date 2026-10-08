@@ -3,112 +3,645 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>yikes!</title>
-    <style>{{{ SHELL_CSS }}}</style>
-	<style>
-		body {
-			background: #111;
-			color: #fff;
-		}
 
-		body #emscripten_logo {
-			width: 200px;
-		}
-	</style>
+    <!-- Without this iPhone Safari lays the page out at a 980px virtual width,
+         scales it down, and every touch coordinate handed to the engine is
+         wrong. viewport-fit=cover lets us paint under the notch/home bar. -->
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+
+    <!-- iPhone Safari has no Element.requestFullscreen. Installing to the Home
+         Screen is the only way to get a real fullscreen, chrome-free game. -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="yikes!">
+    <meta name="theme-color" content="#000000">
+    <link rel="apple-touch-icon" href="assets/portal.svg">
+
+    <title>yikes!</title>
+
+    <!-- Must run before anything else. On a host that cannot send COOP/COEP
+         (GitHub Pages), this registers a service worker that adds them and
+         reloads once, which is the only way to get SharedArrayBuffer there. -->
+    <script src="coi-serviceworker.js"></script>
+
+    <style>{{{ SHELL_CSS }}}</style>
+    <style>
+      :root { color-scheme: dark; }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        color: #eee;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+        /* Kill every iOS gesture that would otherwise fight the game:
+           rubber-band scrolling, pull-to-refresh, double-tap zoom,
+           text selection and the long-press callout. */
+        overflow: hidden;
+        overscroll-behavior: none;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+        position: fixed;
+        inset: 0;
+      }
+
+      /* 100dvh tracks the collapsing Safari URL bar; the 100% fallback is for
+         browsers without dynamic viewport units. */
+      #viewport {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+        overflow: hidden;
+      }
+
+      canvas#canvas {
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        outline: none;
+        border: 0;
+        touch-action: none;
+        image-rendering: auto;
+      }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        text-align: center;
+        padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+                 max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+        box-sizing: border-box;
+        background: #000;
+        z-index: 10;
+      }
+      .overlay[hidden] { display: none; }
+
+      #boot img { width: min(160px, 38vw); height: auto; }
+      #status { font-size: 15px; opacity: .85; min-height: 20px; }
+      #progress { width: min(320px, 70vw); height: 6px; }
+
+      .spinner {
+        width: 26px; height: 26px;
+        border: 3px solid #333;
+        border-top-color: #7ad;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      button.big {
+        font: inherit;
+        font-size: 17px;
+        font-weight: 600;
+        color: #fff;
+        background: #1c6fd0;
+        border: 0;
+        border-radius: 12px;
+        padding: 14px 30px;
+        cursor: pointer;
+        /* buttons are the one place we want the tap to register normally */
+        touch-action: manipulation;
+      }
+      button.big:active { background: #17589f; }
+
+      /* Tap-to-play. iOS will not start an AudioContext, go fullscreen or lock
+         orientation outside a real user gesture, so we gate the game on one. */
+      #play { z-index: 20; background: rgba(0,0,0,.92); }
+      #play .hint { font-size: 13px; opacity: .6; max-width: 34em; line-height: 1.5; }
+
+      #rotate { z-index: 30; background: rgba(0,0,0,.95); font-size: 16px; }
+      #rotate .glyph { font-size: 44px; animation: tilt 1.6s ease-in-out infinite; }
+      @keyframes tilt { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(90deg); } }
+
+      #fatal { z-index: 40; background: #140a0a; }
+      #fatal h2 { margin: 0; font-size: 19px; color: #ff8080; }
+      #fatal .detail {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+        text-align: left;
+        max-width: 42em;
+        max-height: 45vh;
+        overflow: auto;
+        background: #000;
+        border: 1px solid #402020;
+        border-radius: 8px;
+        padding: 12px;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+
+      /* Small control strip; kept clear of the notch and the home indicator. */
+      #hud {
+        position: absolute;
+        top: env(safe-area-inset-top, 0px);
+        right: env(safe-area-inset-right, 0px);
+        z-index: 15;
+        display: flex;
+        gap: 6px;
+        padding: 6px;
+        opacity: .35;
+      }
+      #hud:hover, #hud:active { opacity: .9; }
+      #hud button {
+        font: inherit;
+        font-size: 12px;
+        color: #ddd;
+        background: rgba(20,20,20,.75);
+        border: 1px solid #444;
+        border-radius: 7px;
+        padding: 7px 10px;
+        touch-action: manipulation;
+      }
+
+      #output {
+        position: absolute;
+        left: 0; right: 0; bottom: 0;
+        z-index: 16;
+        height: 34%;
+        width: 100%;
+        box-sizing: border-box;
+        background: rgba(0,0,0,.85);
+        color: #9c9;
+        border: 0;
+        border-top: 1px solid #333;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 11px;
+        resize: none;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      #output[hidden] { display: none; }
+    </style>
   </head>
   <body>
-    <a href="http://emscripten.org"><img id="emscripten_logo" src="assets/portal.svg"></a>
+    <div id="viewport">
+      <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
 
-    <div class="spinner" id='spinner'></div>
-    <div class="emscripten" id="status">Downloading...</div>
+      <div id="hud" hidden>
+        <button id="btn-fullscreen" type="button">Fullscreen</button>
+        <button id="btn-console" type="button">Log</button>
+      </div>
 
-    <span id='controls'>
-      <span><input type="button" value="Fullscreen" onclick="Module.requestFullscreen(document.getElementById('pointerLock').checked, 
-                                                                                document.getElementById('resize').checked)">
-      </span>
-    </span>
+      <textarea id="output" rows="8" readonly hidden></textarea>
 
-    <div class="emscripten">
-      <progress value="0" max="100" id="progress" hidden=1></progress>
+      <div class="overlay" id="boot">
+        <img id="emscripten_logo" src="assets/portal.svg" alt="">
+        <div class="spinner" id="spinner"></div>
+        <div class="emscripten" id="status">Downloading...</div>
+        <progress value="0" max="100" id="progress" hidden></progress>
+      </div>
+
+      <div class="overlay" id="play" hidden>
+        <img src="assets/portal.svg" alt="" style="width:min(140px,32vw)">
+        <button class="big" id="btn-play" type="button">Tap to play</button>
+        <div class="hint" id="play-hint"></div>
+      </div>
+
+      <div class="overlay" id="rotate" hidden>
+        <div class="glyph">&#128241;</div>
+        <div>Rotate your phone to landscape</div>
+      </div>
+
+      <div class="overlay" id="fatal" hidden>
+        <h2 id="fatal-title">Something went wrong</h2>
+        <div class="detail" id="fatal-detail"></div>
+        <button class="big" id="btn-reload" type="button">Reload</button>
+      </div>
     </div>
-
-    <div class="emscripten_border">
-      <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-    </div>
-    <textarea id="output" rows="8"></textarea>
 
     <script type='text/javascript'>
-      var statusElement = document.getElementById('status');
-      var progressElement = document.getElementById('progress');
-      var spinnerElement = document.getElementById('spinner');
-      var canvasElement = document.getElementById('canvas');
-      var outputElement = document.getElementById('output');
-      if (outputElement) outputElement.value = ''; // clear browser cache
+    (function () {
+      'use strict';
 
-      // As a default initial behavior, pop up an alert when webgl context is lost. To make your
-      // application robust, you may want to override this behavior before shipping!
-      // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
-      canvasElement.addEventListener('webglcontextlost', (e) => {
-        alert('WebGL context lost. You will need to reload the page.');
-        e.preventDefault();
-      }, false);
+      // --- element handles -------------------------------------------------
+      // pre.js and post.js reach for these by name, so they stay global.
+      window.statusElement   = document.getElementById('status');
+      window.progressElement = document.getElementById('progress');
+      window.spinnerElement  = document.getElementById('spinner');
+      window.canvasElement   = document.getElementById('canvas');
+      window.outputElement   = document.getElementById('output');
 
-	  canvasElement.widthNative = screen.availWidth
-	  canvasElement.heightNative = screen.availHeight
+      var bootEl   = document.getElementById('boot');
+      var playEl   = document.getElementById('play');
+      var rotateEl = document.getElementById('rotate');
+      var fatalEl  = document.getElementById('fatal');
+      var hudEl    = document.getElementById('hud');
 
+      // --- platform ---------------------------------------------------------
+      var ua = navigator.userAgent;
+      var isIOS = /iPad|iPhone|iPod/.test(ua) ||
+                  // iPadOS 13+ reports as a Mac; the touch point count gives it away.
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var isIPhone = /iPhone|iPod/.test(ua) ||
+                     (isIOS && Math.min(screen.width, screen.height) < 500);
+      // `'ontouchstart' in window` is true on plenty of desktop browsers and
+      // would wrongly put the on-screen controls over a mouse-and-keyboard
+      // session. Require a coarse primary pointer as well.
+      function matches(query) {
+        try { return !!(window.matchMedia && window.matchMedia(query).matches); }
+        catch (e) { return false; }
+      }
+      var isTouch = isIOS || (navigator.maxTouchPoints > 0 && matches('(pointer: coarse)'));
+      var canFullscreen = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+
+      window.GameHost = {
+        isIOS: isIOS,
+        isIPhone: isIPhone,
+        isTouch: isTouch,
+        canFullscreen: canFullscreen,
+        started: false
+      };
+
+      // --- fatal error surface ---------------------------------------------
+      // On a phone there is no console to open, so errors have to be on screen.
+      var fatalShown = false;
+      function showFatal(title, detail) {
+        if (fatalShown) return;
+        fatalShown = true;
+        document.getElementById('fatal-title').textContent = title;
+        document.getElementById('fatal-detail').textContent = String(detail || '').slice(0, 4000);
+        fatalEl.hidden = false;
+        bootEl.hidden = true;
+        playEl.hidden = true;
+      }
+      window.showFatal = showFatal;
+      document.getElementById('btn-reload').addEventListener('click', function () {
+        location.reload();
+      });
+
+      // --- capability gate --------------------------------------------------
+      // This build is linked with pthreads + SharedArrayBuffer + WebGL2. If any
+      // of that is missing, failing here with an explanation beats a wall of
+      // console noise from deep inside the runtime.
+      function checkSupport() {
+        if (typeof WebAssembly !== 'object' || typeof WebAssembly.instantiate !== 'function') {
+          return { ok: false, title: 'WebAssembly is not available',
+                   detail: 'This browser cannot run WebAssembly. On iOS make sure you are not in Lockdown Mode (Settings > Privacy & Security > Lockdown Mode), which disables JIT and WebAssembly.' };
+        }
+
+        if (typeof SharedArrayBuffer === 'undefined' || !self.crossOriginIsolated) {
+          var coi = window.coiServiceWorker || { state: 'idle', reason: '' };
+
+          // The service worker is mid-flight: it is about to reload the page,
+          // and the reload comes back isolated. Not an error, just a wait.
+          if (coi.reloading || coi.state === 'registering') {
+            return { ok: false, pending: true, title: 'Preparing...',
+                     detail: 'Setting up cross-origin isolation. The page will reload by itself.' };
+          }
+
+          return { ok: false, title: 'Page is not cross-origin isolated',
+                   detail: 'The engine is built with threads, which need SharedArrayBuffer. ' +
+                           'SharedArrayBuffer is only handed out to a cross-origin isolated page, so the server must send:\n\n' +
+                           '  Cross-Origin-Opener-Policy: same-origin\n' +
+                           '  Cross-Origin-Embedder-Policy: require-corp\n\n' +
+                           'crossOriginIsolated is currently ' + self.crossOriginIsolated + '.\n\n' +
+                           (coi.reason ? 'Service worker fallback: ' + coi.reason + '\n\n' : '') +
+                           'On a host that cannot set headers (GitHub Pages), coi-serviceworker.js ' +
+                           'must be served next to this page. Otherwise run serve.py, or deploy the ' +
+                           'included _headers file. Either way the page must be on HTTPS or localhost.' };
+        }
+
+        var gl = null;
+        try {
+          gl = document.createElement('canvas').getContext('webgl2');
+        } catch (e) { /* reported below */ }
+        if (!gl) {
+          return { ok: false, title: 'WebGL 2 is not available',
+                   detail: 'This build renders through WebGL 2 (GLES3). iOS supports it from iOS 15 onwards; please update iOS, and check that Settings > Safari > Advanced > Experimental Features has not disabled WebGL 2.' };
+        }
+        // Free the probe context right away; iOS allows very few live contexts.
+        var lose = gl.getExtension('WEBGL_lose_context');
+        if (lose) lose.loseContext();
+
+        if (typeof OffscreenCanvas === 'undefined' ||
+            typeof canvasElement.transferControlToOffscreen !== 'function') {
+          return { ok: false, title: 'OffscreenCanvas is not available',
+                   detail: 'This build renders from a worker thread using OffscreenCanvas, which iOS supports from iOS 17 onwards. Please update iOS, or rebuild without -sOFFSCREENCANVASES_TO_PTHREAD.' };
+        }
+
+        return { ok: true };
+      }
+
+      var support = checkSupport();
+      // post.js reads this; it runs inside the module scope and can hold main()
+      // back with a run dependency, which we cannot reach from out here.
+      GameHost.supported = support.ok;
+      if (!support.ok) {
+        if (support.pending) {
+          // A reload is already on its way; show progress, not a failure.
+          statusElement.textContent = support.detail;
+        } else {
+          showFatal(support.title, support.detail);
+        }
+      }
+
+      // --- canvas sizing ----------------------------------------------------
+      // Rendering an iPhone's native 3x pixel grid means ~3.5M pixels per frame,
+      // which Source in WebAssembly cannot keep up with. Cap the backing store
+      // to a pixel budget and let CSS stretch it over the viewport.
+      var PIXEL_BUDGET = isTouch ? 1280 * 720 : 1920 * 1080;
+
+      function viewportSize() {
+        var vv = window.visualViewport;
+        var w = Math.round((vv && vv.width) || window.innerWidth || screen.width);
+        var h = Math.round((vv && vv.height) || window.innerHeight || screen.height);
+        return { w: Math.max(w, 320), h: Math.max(h, 240) };
+      }
+
+      function targetResolution() {
+        var v = viewportSize();
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var w = v.w * dpr, h = v.h * dpr;
+        var scale = Math.sqrt(PIXEL_BUDGET / (w * h));
+        if (scale < 1) { w *= scale; h *= scale; }
+        // Keep both axes even; odd render targets upset some GL paths.
+        return { w: Math.max(2, Math.round(w / 2) * 2), h: Math.max(2, Math.round(h / 2) * 2) };
+      }
+
+      // pre.js reads this to pass -w/-h to the engine.
+      window.gameResolution = targetResolution();
+
+      // Hint values emscripten's own canvas bookkeeping looks at.
+      canvasElement.widthNative = window.gameResolution.w;
+      canvasElement.heightNative = window.gameResolution.h;
+
+      // The backing store can only be set while we still own the canvas. Once
+      // -sOFFSCREENCANVASES_TO_PTHREAD transfers it to the render thread, any
+      // width/height write from here throws InvalidStateError, and the engine
+      // owns resizing from then on.
+      function setBackingStore(size) {
+        if (canvasElement.controlTransferredOffscreen) return false;
+        try {
+          canvasElement.width = size.w;
+          canvasElement.height = size.h;
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+      setBackingStore(window.gameResolution);
+
+      // CSS sizing is always safe and is what actually fills the screen.
+      function applyCanvasCss() {
+        var v = viewportSize();
+        canvasElement.style.width = v.w + 'px';
+        canvasElement.style.height = v.h + 'px';
+      }
+
+      function updateOrientationPrompt() {
+        var v = viewportSize();
+        // The touch layout splits the screen left/right, so portrait leaves the
+        // move and look zones as unusable slivers. Ask before the player tries.
+        rotateEl.hidden = !(isTouch && v.h > v.w && GameHost.started);
+      }
+
+      function onResize() {
+        applyCanvasCss();
+        updateOrientationPrompt();
+      }
+
+      applyCanvasCss();
+      window.addEventListener('resize', onResize);
+      window.addEventListener('orientationchange', function () {
+        // iOS reports stale metrics during the rotation animation.
+        setTimeout(onResize, 100);
+        setTimeout(onResize, 500);
+      });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', onResize);
+        window.visualViewport.addEventListener('scroll', onResize);
+      }
+
+      // --- iOS gesture suppression -----------------------------------------
+      // touch-action/overscroll-behavior cover most of it, but Safari still
+      // honours pinch-zoom and double-tap-to-zoom via these legacy events.
+      ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (name) {
+        document.addEventListener(name, function (e) { e.preventDefault(); }, { passive: false });
+      });
+      document.addEventListener('dblclick', function (e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener('touchmove', function (e) {
+        // Anything over the canvas belongs to the game; never scroll the page.
+        if (e.target === canvasElement) e.preventDefault();
+      }, { passive: false });
+      // Safari scrolls the window when the keyboard or a stray gesture appears.
+      // Only correct an actual offset, so this cannot feed back on itself.
+      window.addEventListener('scroll', function () {
+        if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+      });
+
+      // --- audio unlock -----------------------------------------------------
+      // iOS starts every AudioContext suspended and only resume() inside a real
+      // user gesture works. Keep a registry of contexts as they are created so
+      // the tap handler can resume whatever SDL ended up building.
+      var audioContexts = [];
+      (function patchAudioContext() {
+        ['AudioContext', 'webkitAudioContext'].forEach(function (name) {
+          var Original = window[name];
+          if (typeof Original !== 'function') return;
+          function Patched() {
+            var ctx = Reflect.construct(Original, arguments, Patched);
+            audioContexts.push(ctx);
+            return ctx;
+          }
+          Patched.prototype = Original.prototype;
+          window[name] = Patched;
+        });
+      })();
+
+      function resumeAudio() {
+        audioContexts.forEach(function (ctx) {
+          if (ctx && ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+            ctx.resume().catch(function () { /* nothing useful to do */ });
+          }
+        });
+      }
+      window.resumeAudio = resumeAudio;
+      // Later gestures get another go, in case audio came up after the first tap.
+      ['pointerdown', 'touchend', 'keydown'].forEach(function (name) {
+        document.addEventListener(name, resumeAudio, { passive: true });
+      });
+
+      // --- fullscreen / hud -------------------------------------------------
+      function requestFullscreen() {
+        var el = document.documentElement;
+        var fn = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (!fn) return Promise.reject(new Error('fullscreen unsupported'));
+        try {
+          return Promise.resolve(fn.call(el)).catch(function () {});
+        } catch (e) {
+          return Promise.reject(e);
+        }
+      }
+
+      function lockLandscape() {
+        // Unsupported on iOS; harmless elsewhere.
+        try {
+          if (screen.orientation && screen.orientation.lock) {
+            var p = screen.orientation.lock('landscape');
+            if (p && p.catch) p.catch(function () {});
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      document.getElementById('btn-fullscreen').addEventListener('click', function () {
+        requestFullscreen().then(lockLandscape, function () {});
+      });
+      document.getElementById('btn-console').addEventListener('click', function () {
+        outputElement.hidden = !outputElement.hidden;
+      });
+
+      // --- tap to play ------------------------------------------------------
+      function showPlayGate() {
+        if (fatalShown) return;
+        bootEl.hidden = true;
+        var hint = document.getElementById('play-hint');
+        if (isIPhone && !canFullscreen) {
+          hint.textContent = 'iPhone Safari cannot make a web page fullscreen. For a proper fullscreen game, tap the Share button and choose "Add to Home Screen", then launch it from there. Play in landscape.';
+        } else if (isTouch) {
+          hint.textContent = 'Drag on the left half of the screen to move, on the right half to look. Play in landscape.';
+        } else {
+          hint.textContent = 'Click to capture the mouse. Press Escape to release it.';
+        }
+        playEl.hidden = false;
+      }
+
+      document.getElementById('btn-play').addEventListener('click', function () {
+        playEl.hidden = true;
+        hudEl.hidden = false;
+        GameHost.started = true;
+        resumeAudio();
+        // Both of these need this gesture, and both are no-ops on iPhone.
+        if (canFullscreen && isTouch) requestFullscreen().then(lockLandscape, function () {});
+        else lockLandscape();
+        updateOrientationPrompt();
+        try { canvasElement.focus(); } catch (e) { /* ignore */ }
+
+        // post.js parks main() behind a run dependency until this fires, so the
+        // engine only starts up once we are inside a real user gesture.
+        window.dispatchEvent(new Event('gamehost:play'));
+      });
+      window.showPlayGate = showPlayGate;
+
+      // --- module -----------------------------------------------------------
       var Module = {
-        print(...args) {
-          console.log(...args);
-          // These replacements are necessary if you render to raw HTML
-          //text = text.replace(/&/g, "&amp;");
-          //text = text.replace(/</g, "&lt;");
-          //text = text.replace(/>/g, "&gt;");
-          //text = text.replace('\n', '<br>', 'g');
+        canvas: canvasElement,
+        arguments: [],
+
+        print: function () {
+          var text = Array.prototype.join.call(arguments, ' ');
+          console.log(text);
           if (outputElement) {
-            var text = args.join(' ');
             outputElement.value += text + "\n";
-            outputElement.scrollTop = outputElement.scrollHeight; // focus on bottom
+            outputElement.scrollTop = outputElement.scrollHeight;
           }
         },
-        canvas: canvasElement,
-        setStatus(text) {
-          Module.setStatus.last ??= { time: Date.now(), text: '' };
-          if (text === Module.setStatus.last.text) return;
+        printErr: function () {
+          var text = Array.prototype.join.call(arguments, ' ');
+          console.error(text);
+          if (outputElement) {
+            outputElement.value += text + "\n";
+            outputElement.scrollTop = outputElement.scrollHeight;
+          }
+        },
+
+        setStatus: function (text) {
+          var last = Module.setStatus.last || (Module.setStatus.last = { time: Date.now(), text: '' });
+          if (text === last.text) return;
           var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
           var now = Date.now();
-          // if this is a progress update, skip it if too soon
-          if (m && now - Module.setStatus.last.time < 30) return;
-          Module.setStatus.last.time = now;
-          Module.setStatus.last.text = text;
+          if (m && now - last.time < 30) return;
+          last.time = now;
+          last.text = text;
           if (m) {
             text = m[1];
-            progressElement.value = parseInt(m[2])*100;
-            progressElement.max = parseInt(m[4])*100;
+            progressElement.value = parseInt(m[2]) * 100;
+            progressElement.max = parseInt(m[4]) * 100;
             progressElement.hidden = false;
-            spinnerElement.hidden = false;
+            spinnerElement.style.display = '';
           } else {
-            progressElement.value = null;
-            progressElement.max = null;
+            progressElement.removeAttribute('value');
             progressElement.hidden = true;
             if (!text) spinnerElement.style.display = 'none';
           }
-          statusElement.innerHTML = text;
+          statusElement.textContent = text;
         },
+
         totalDependencies: 0,
-        monitorRunDependencies(left) {
+        monitorRunDependencies: function (left) {
           this.totalDependencies = Math.max(this.totalDependencies, left);
-          Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+          Module.setStatus(left
+            ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')'
+            : 'All downloads complete.');
+        },
+
+        onAbort: function (what) {
+          showFatal('The engine stopped', String(what) + '\n\nOn a phone this is most often running out of memory. Close other tabs and apps and reload.');
         }
       };
-      Module.setStatus('Downloading...');
-      window.onerror = (event) => {
-        // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
-        Module.setStatus('Exception thrown, see JavaScript console');
-        spinnerElement.style.display = 'none';
-        Module.setStatus = (text) => {
-          if (text) console.error('[post-exception status] ' + text);
-        };
-      };
+      window.Module = Module;
+
+      if (support.ok) Module.setStatus('Downloading...');
+
+      // --- global error reporting ------------------------------------------
+      // Emscripten unwinds the stack by throwing during normal startup and exit,
+      // and cross-origin scripts report an opaque "Script error." Neither is
+      // worth throwing a fatal dialog at the player over.
+      function isBenign(msg) {
+        return !msg ||
+               msg === 'Script error.' ||
+               /ExitStatus|unwind|SimulateInfiniteLoop|ResizeObserver loop/i.test(msg);
+      }
+
+      window.addEventListener('error', function (e) {
+        var msg = (e && e.message) || '';
+        if (isBenign(msg)) return;
+        if (e && e.filename) msg += '\n  at ' + e.filename + ':' + (e.lineno || 0);
+        if (e && e.error && e.error.stack) msg += '\n\n' + e.error.stack;
+        console.error(msg);
+        if (/out of memory|RangeError|Array buffer allocation failed/i.test(msg)) {
+          showFatal('Out of memory', msg + '\n\nThis browser could not give the game enough memory. Close other tabs and apps, then reload.');
+        } else {
+          showFatal('Exception thrown', msg);
+        }
+      });
+
+      window.addEventListener('unhandledrejection', function (e) {
+        var r = e && e.reason;
+        var msg = (r && (r.stack || r.message)) || String(r);
+        if (isBenign(r && r.message)) return;
+        console.error(msg);
+        showFatal('Unhandled error', msg);
+      });
+
+      // The canvas losing its context is routine on iOS when the tab is
+      // backgrounded; say so rather than leaving a black screen.
+      canvasElement.addEventListener('webglcontextlost', function (e) {
+        e.preventDefault();
+        showFatal('Graphics context lost',
+          'iOS dropped the WebGL context, usually after the tab was in the background or under memory pressure. Reload to continue.');
+      }, false);
+    })();
     </script>
     {{{ SCRIPT }}}
   </body>

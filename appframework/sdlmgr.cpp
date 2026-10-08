@@ -25,6 +25,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include <dlfcn.h>
+#include <emscripten.h>
 #include <emscripten/html5.h>
 #endif
 
@@ -1198,10 +1199,27 @@ void CSDLMgr::OnFrameRendered()
 		SDL_SetWindowGrab( m_Window, bWindowGrab );
 		SDL_SetRelativeMouseMode( bRelativeMouseMode );
 #ifdef __EMSCRIPTEN__
-		if (bWindowGrab)
-			emscripten_request_pointerlock("canvas", true);
-		else
-			emscripten_exit_pointerlock();
+		// iOS has never shipped the Pointer Lock API, and on a touch device the
+		// engine's on-screen touch controls drive the view anyway. Requesting a
+		// lock there throws out of the deferred-call handler on every click, so
+		// only ask where the browser actually supports it.
+		//
+		// This runs on the proxied main pthread, which has no DOM of its own --
+		// the probe has to be evaluated on the browser main thread.
+		static const bool bPointerLockSupported = MAIN_THREAD_EM_ASM_INT({
+			var body = document.body;
+			if (!body) return 0;
+			if (navigator.maxTouchPoints > 0 && !window.matchMedia('(pointer: fine)').matches) return 0;
+			return (body.requestPointerLock || body.webkitRequestPointerLock) ? 1 : 0;
+		}) != 0;
+
+		if ( bPointerLockSupported )
+		{
+			if (bWindowGrab)
+				emscripten_request_pointerlock("canvas", true);
+			else
+				emscripten_exit_pointerlock();
+		}
 #endif
 
 		SDL_ShowCursor( m_bCursorVisible ? 1 : 0 );

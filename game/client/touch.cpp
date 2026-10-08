@@ -450,10 +450,17 @@ void CTouchControls::CreateAtlasTexture()
 	int atlasSize = 0;
 
 	stbrp_rect *rects = (stbrp_rect*)malloc(textureList.Count()*sizeof(stbrp_rect));
-	memset(rects, 0, sizeof(stbrp_node)*textureList.Count());
+	// This array is stbrp_rect, not stbrp_node. Clearing it with the node size
+	// left the tail of every entry uninitialised.
+	memset(rects, 0, sizeof(stbrp_rect)*textureList.Count());
 
 	if( touchTextureID )
+	{
 		vgui::surface()->DeleteTextureByID( touchTextureID );
+		// Paint() keys off this id; leaving it set after the delete hands the
+		// renderer a stale texture if we bail out below.
+		touchTextureID = 0;
+	}
 
 	int rectCount = 0;
 
@@ -494,7 +501,7 @@ void CTouchControls::CreateAtlasTexture()
 				continue;
 			}
 			if( t->vtf->Height() != t->vtf->Width() || (t->vtf->Height() & (t->vtf->Height() - 1)) != 0 )
-				Error("%s texture is wrong! Don't use npot textures for touch.");
+				Error("%s texture is wrong! Don't use npot textures for touch.", t->szName);
 
 			t->height = t->vtf->Height();
 			t->width = t->vtf->Width();
@@ -746,44 +753,53 @@ void CTouchControls::Paint()
 		}
 	}
 
-	m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial(touchTextureID) );
-	meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, meshCount );
-
-	for( it = btns.begin(); it != btns.end(); it++ )
+	// When none of the touch textures made it into the atlas -- which is what
+	// happens on builds whose game data has no vgui/touch materials at all --
+	// touchTextureID stays 0 and meshCount stays 0. Asking for the material of
+	// texture id 0 and then building a zero-quad mesh is invalid; skip the
+	// atlas pass entirely instead. The buttons themselves were already drawn
+	// individually in the loop above.
+	if( meshCount > 0 && touchTextureID )
 	{
-		CTouchButton *btn = *it;
+		m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial(touchTextureID) );
+		meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, meshCount );
 
-		if( btn->texture != NULL && !(btn->flags & TOUCH_FL_HIDE) && !btn->texture->textureID )
+		for( it = btns.begin(); it != btns.end(); it++ )
 		{
-			CTouchTexture *t = btn->texture;
+			CTouchButton *btn = *it;
 
-			int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? max(MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
-			rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
+			if( btn->texture != NULL && !(btn->flags & TOUCH_FL_HIDE) && !btn->texture->textureID )
+			{
+				CTouchTexture *t = btn->texture;
 
-			meshBuilder.Position3f( btn->x1*screen_w, btn->y1*screen_h, 0 );
-			meshBuilder.Color4ubv( color );
-			meshBuilder.TexCoord2f( 0, t->X0, t->Y0 );
-			meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+				int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? max(MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
+				rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
 
-			meshBuilder.Position3f( btn->x2*screen_w, btn->y1*screen_h, 0 );
-			meshBuilder.Color4ubv( color );
-			meshBuilder.TexCoord2f( 0, t->X1, t->Y0 );
-			meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+				meshBuilder.Position3f( btn->x1*screen_w, btn->y1*screen_h, 0 );
+				meshBuilder.Color4ubv( color );
+				meshBuilder.TexCoord2f( 0, t->X0, t->Y0 );
+				meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
 
-			meshBuilder.Position3f( btn->x2*screen_w, btn->y2*screen_h, 0 );
-			meshBuilder.Color4ubv( color );
-			meshBuilder.TexCoord2f( 0, t->X1, t->Y1 );
-			meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+				meshBuilder.Position3f( btn->x2*screen_w, btn->y1*screen_h, 0 );
+				meshBuilder.Color4ubv( color );
+				meshBuilder.TexCoord2f( 0, t->X1, t->Y0 );
+				meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
 
-			meshBuilder.Position3f( btn->x1*screen_w, btn->y2*screen_h, 0 );
-			meshBuilder.Color4ubv( color );
-			meshBuilder.TexCoord2f( 0, t->X0, t->Y1 );
-			meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+				meshBuilder.Position3f( btn->x2*screen_w, btn->y2*screen_h, 0 );
+				meshBuilder.Color4ubv( color );
+				meshBuilder.TexCoord2f( 0, t->X1, t->Y1 );
+				meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+
+				meshBuilder.Position3f( btn->x1*screen_w, btn->y2*screen_h, 0 );
+				meshBuilder.Color4ubv( color );
+				meshBuilder.TexCoord2f( 0, t->X0, t->Y1 );
+				meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+			}
 		}
-	}
 
-	meshBuilder.End();
-	m_pMesh->Draw();
+		meshBuilder.End();
+		m_pMesh->Draw();
+	}
 
 
 	if( m_flHideTouch < gpGlobals->curtime )

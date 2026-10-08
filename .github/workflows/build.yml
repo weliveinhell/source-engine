@@ -14,8 +14,14 @@ jobs:
       run: |
         source emscripten/get_emscripten.sh
         emmake emscripten/build.sh
+        echo "::group::Module sizes (what WebKit must compile on the phone)"
+        ls -l build/install/*.so build/install/hl2_launcher.wasm | awk '{ printf "%9.2f MB  %s\n", $5/1048576, $9 }' | sort -rn
+        du -cb build/install/*.so | tail -n 1 | awk '{ printf "total side modules: %.1f MB\n", $1/1048576 }'
+        echo "::endgroup::"
         cd build/install/
-        zip -r ../../out.zip *
+        # "." rather than "*": the glob skips dotfiles, which would drop
+        # .nojekyll and leave a manual GitHub Pages deploy broken.
+        zip -r ../../out.zip .
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:

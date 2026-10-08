@@ -1,0 +1,78 @@
+name: Deploy to GitHub Pages
+
+# GitHub Pages cannot send Cross-Origin-Opener-Policy / Cross-Origin-Embedder-
+# Policy, which the threaded wasm build needs for SharedArrayBuffer. The bundle
+# ships coi-serviceworker.js, which adds those headers from a service worker, so
+# the published site ends up cross-origin isolated anyway.
+#
+# Run it by hand from any branch: Actions -> Deploy to GitHub Pages -> Run
+# workflow. Pages must be set to "GitHub Actions" as its source, under
+# Settings -> Pages.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; queue them instead.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build wasm
+        run: |
+          source emscripten/get_emscripten.sh
+          emmake emscripten/build.sh
+
+      # Optional. Set the CHUNKS_BASE_URL repository variable (Settings ->
+      # Secrets and variables -> Actions -> Variables) to publish the game data
+      # alongside the engine. Mind the limits: GitHub Pages refuses to publish a
+      # site over 1GB, so for the full game you usually want to leave this unset
+      # and host the chunks elsewhere, pointing at them with ?chunks=<url>.
+      - name: Fetch game data
+        if: vars.CHUNKS_BASE_URL != ''
+        run: |
+          python3 emscripten/fetch_chunks.py \
+            --dir build/install \
+            --base-url "${{ vars.CHUNKS_BASE_URL }}"
+
+      - name: Report bundle size
+        run: |
+          du -sh build/install
+          echo "--- largest files ---"
+          find build/install -type f -printf '%s\t%p\n' | sort -rn | head -10 | \
+            awk -F'\t' '{ printf "%8.1f MB  %s\n", $1/1048576, $2 }'
+          total=$(du -sb build/install | cut -f1)
+          if [ "$total" -gt 1073741824 ]; then
+            echo "::error::Site is $((total/1048576))MB. GitHub Pages will not publish a site over 1GB."
+            exit 1
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/install
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

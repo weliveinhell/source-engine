@@ -1,0 +1,12 @@
+# Cross-origin isolation headers.
+#
+# This build uses pthreads, which need SharedArrayBuffer, which browsers only
+# expose on a cross-origin isolated page. Without these two headers the game
+# does not start at all -- on desktop or on a phone.
+#
+# Netlify and Cloudflare Pages read this file verbatim from the site root.
+# For other hosts, the equivalent config is in emscripten/README-hosting.md.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin

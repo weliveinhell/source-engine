@@ -157,8 +157,20 @@ prepend.push(...[
 	...fs.globSync(baseGamePath + '/hl2/hl2_misc/materials/vgui/**/*.*'),
 	...fs.globSync(baseGamePath + '/hl2/hl2_pak/materials/vgui/**/*.*'),
 	...fs.globSync(baseGamePath + '/hl2/hl2_textures/materials/console/*')
-].map(x => 
+].map(x =>
 	`GAME ${x.replace(/^.+\/hl2\/.+?\//g, '')}`
+))
+
+// Touch button icons. These are not in the desktop VPKs -- they come from the
+// Android build of source-engine -- so they sit loose in the mod folder and the
+// globs above miss them. Without them the on-screen controls still work, but
+// every button draws with the missing-material texture. The globs are no-ops
+// when the files are absent.
+prepend.push(...[
+	...fs.globSync(baseGamePath + '/hl2/materials/vgui/touch/*.vtf'),
+	...fs.globSync(baseGamePath + '/portal/materials/vgui/touch/*.vtf'),
+].map(x =>
+	`GAME ${x.replace(/^.+?\/materials\//, 'materials/')}`
 ))
 
 let currentMap = 'background01'

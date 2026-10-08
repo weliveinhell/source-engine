@@ -554,6 +554,8 @@ def configure(conf):
 
 		flags += ['-sSHARED_MEMORY=1', '-msimd128', '-msse']
 		flags += ['-sUSE_BZIP2=1', '-sUSE_SDL=2', '-sUSE_FREETYPE=1', '-sUSE_LIBJPEG=1', '-sUSE_LIBPNG']
+		# Keep SIDE_MODULE=1: SIDE_MODULE=2 drops non-DLL_EXPORT symbols that
+		# Source shares across modules (e.g. CThread::Start) and aborts at load.
 		linkflags += ['-sSIDE_MODULE=1', '-Wl,--allow-multiple-definition']
 		flags += ['-sFULL_ES3', '-sMALLOC=mimalloc']
 
