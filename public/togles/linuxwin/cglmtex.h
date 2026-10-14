@@ -30,6 +30,17 @@
 #ifndef CGLMTEX_H
 #define	CGLMTEX_H
 
+// WebGL 2 / GLES 3 have no border colour and no GL_CLAMP_TO_BORDER: both are
+// INVALID_ENUM there (left a GL error every frame in the browser build), so
+// clamp-to-border falls back to clamp-to-edge and the border colour is skipped.
+#ifdef __EMSCRIPTEN__
+#define TOGL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE
+#define TOGL_SET_BORDER_COLOR( call ) ((void)0)
+#else
+#define TOGL_CLAMP_TO_BORDER GL_CLAMP_TO_BORDER
+#define TOGL_SET_BORDER_COLOR( call ) call
+#endif
+
 #pragma once
 
 #ifdef OSX
@@ -298,7 +309,7 @@ struct GLMTexSamplingParams
 #ifndef OSX
 	FORCEINLINE void SetToSamplerObject( GLuint nSamplerObject ) const
 	{
-		static const GLenum dxtogl_addressMode[] = { GL_REPEAT, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_BORDER, (GLenum)-1 };
+		static const GLenum dxtogl_addressMode[] = { GL_REPEAT, GL_CLAMP_TO_EDGE, TOGL_CLAMP_TO_BORDER, (GLenum)-1 };
 		static const GLenum dxtogl_magFilter[4] = { GL_NEAREST,	GL_NEAREST,	GL_LINEAR, GL_LINEAR };
 		static const GLenum dxtogl_minFilter[4][4] = // indexed by _D3DTEXTUREFILTERTYPE on both axes: [row is min filter][col is mip filter]. 
 		{
@@ -323,7 +334,7 @@ struct GLMTexSamplingParams
 			flBorderColor[2] = ((m_borderColor      ) & 0xFF) * (1.0f/255.0f);	//B
 			flBorderColor[3] = ((m_borderColor >> 24) & 0xFF) * (1.0f/255.0f);	//A
 		}
-		gGL->glSamplerParameterfv( nSamplerObject, GL_TEXTURE_BORDER_COLOR, flBorderColor ); // <-- this crashes ATI's driver, remark it out
+		TOGL_SET_BORDER_COLOR( gGL->glSamplerParameterfv( nSamplerObject, GL_TEXTURE_BORDER_COLOR, flBorderColor ) );
 		gGL->glSamplerParameteri( nSamplerObject, GL_TEXTURE_MIN_LOD, m_packed.m_minLOD );
 //		gGL->glSamplerParameterfv( nSamplerObject, GL_TEXTURE_LOD_BIAS, &m_lodBias );
 		gGL->glSamplerParameteri( nSamplerObject, GL_TEXTURE_COMPARE_MODE_ARB, m_packed.m_compareMode ? GL_COMPARE_R_TO_TEXTURE_ARB : GL_NONE );
@@ -341,7 +352,7 @@ struct GLMTexSamplingParams
 
 	inline void DeltaSetToTarget( GLenum target, const GLMTexSamplingParams &curState )
 	{
-		static const GLenum dxtogl_addressMode[] = { GL_REPEAT, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_BORDER, (GLenum)-1 };
+		static const GLenum dxtogl_addressMode[] = { GL_REPEAT, GL_CLAMP_TO_EDGE, TOGL_CLAMP_TO_BORDER, (GLenum)-1 };
 		static const GLenum dxtogl_magFilter[4] = { GL_NEAREST,	GL_NEAREST,	GL_LINEAR, GL_LINEAR };
 		static const GLenum dxtogl_minFilter[4][4] = // indexed by _D3DTEXTUREFILTERTYPE on both axes: [row is min filter][col is mip filter]. 
 		{
@@ -387,7 +398,7 @@ struct GLMTexSamplingParams
 				flBorderColor[3] = ((m_borderColor >> 24) & 0xFF) * (1.0f/255.0f);	//A
 			}
 		
-			gGL->glTexParameterfv( target, GL_TEXTURE_BORDER_COLOR, flBorderColor ); // <-- this crashes ATI's driver, remark it out
+			TOGL_SET_BORDER_COLOR( gGL->glTexParameterfv( target, GL_TEXTURE_BORDER_COLOR, flBorderColor ) );
 		}
 
 		if ( m_packed.m_minLOD != curState.m_packed.m_minLOD )
@@ -418,7 +429,7 @@ struct GLMTexSamplingParams
 
 	inline void SetToTarget( GLenum target )
 	{
-		static const GLenum dxtogl_addressMode[] = { GL_REPEAT, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_BORDER, (GLenum)-1 };
+		static const GLenum dxtogl_addressMode[] = { GL_REPEAT, GL_CLAMP_TO_EDGE, TOGL_CLAMP_TO_BORDER, (GLenum)-1 };
 		static const GLenum dxtogl_magFilter[4] = { GL_NEAREST,	GL_NEAREST,	GL_LINEAR, GL_LINEAR };
 		static const GLenum dxtogl_minFilter[4][4] = // indexed by _D3DTEXTUREFILTERTYPE on both axes: [row is min filter][col is mip filter]. 
 		{
@@ -443,7 +454,7 @@ struct GLMTexSamplingParams
 			flBorderColor[2] = ((m_borderColor      ) & 0xFF) * (1.0f/255.0f);	//B
 			flBorderColor[3] = ((m_borderColor >> 24) & 0xFF) * (1.0f/255.0f);	//A
 		}
-		gGL->glTexParameterfv( target, GL_TEXTURE_BORDER_COLOR, flBorderColor ); // <-- this crashes ATI's driver, remark it out
+		TOGL_SET_BORDER_COLOR( gGL->glTexParameterfv( target, GL_TEXTURE_BORDER_COLOR, flBorderColor ) );
 		gGL->glTexParameteri( target, GL_TEXTURE_MIN_LOD, m_packed.m_minLOD );
 //		gGL->glTexParameterfv( target, GL_TEXTURE_LOD_BIAS, &m_lodBias );
 		gGL->glTexParameteri( target, GL_TEXTURE_COMPARE_MODE_ARB, m_packed.m_compareMode ? GL_COMPARE_R_TO_TEXTURE_ARB : GL_NONE );

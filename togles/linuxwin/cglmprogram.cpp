@@ -360,9 +360,11 @@ void	CGLMProgram::Compile( EGLMProgramLang lang )
 				gGL->glGetShaderiv(glslDesc->m_object.glsl , GL_INFO_LOG_LENGTH, &maxLength);
 
 				GLchar  log[4096];
+				log[0] = 0;
 				gGL->glGetShaderInfoLog( glslDesc->m_object.glsl, sizeof(log), &maxLength, log );
-				Msg("shader compile log: %s\n", log);
-				Msg("Shader %d source is:\n===============\n%s\nn===============\n", glslDesc->m_object.glsl, section);											
+				log[sizeof(log) - 1] = 0;
+				Msg( "[Render360 GL] shader compile failed: %s %s :: %.900s\n",
+					glslStage == GL_FRAGMENT_SHADER ? "ps" : "vs", m_shaderName[0] ? m_shaderName : "?", log );											
 			}
 
 #if 0 //GLM_FREE_SHADER_TEXT
@@ -990,16 +992,17 @@ bool CGLMShaderPair::SetProgramPair( CGLMProgram *vp, CGLMProgram *fp )
 		gGL->glGetProgramiv(m_program, GL_LINK_STATUS, &isLinked);
 		if(isLinked == GL_FALSE)
 		{
-			GLint maxLength = 0;
-			gGL->glGetShaderiv(m_program, GL_INFO_LOG_LENGTH, &maxLength);
-
+			// This used to ask glGetShaderiv about the *program* id. Under WebGL
+			// that hands getShaderInfoLog a non-shader and throws, which is the
+			// "must be an instance of WebGLShader" crash seen on iPhone.
 			GLchar  log[4096];
+			log[0] = 0;
+			GLint maxLength = 0;
 			gGL->glGetProgramInfoLog( m_program, sizeof(log), &maxLength, log );
-			if( maxLength )
-			{
-				Msg("vp: \n%s\nfp: \n%s\n", vp->m_text, fp->m_text );
-				Msg("shader %d link log: %s\n", m_program, log);
-			}
+			log[sizeof(log) - 1] = 0;
+			// One bounded line: full shader dumps are tens of KB per failure.
+			Msg( "[Render360 GL] program link failed: vs=%s ps=%s :: %.900s\n",
+				vp->m_shaderName[0] ? vp->m_shaderName : "?", fp->m_shaderName[0] ? fp->m_shaderName : "?", log );
 		}
 		
 		m_bCheckLinkStatus = true;

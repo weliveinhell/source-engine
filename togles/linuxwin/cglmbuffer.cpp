@@ -454,6 +454,8 @@ CGLMBuffer::CGLMBuffer( GLMContext *pCtx, EGLMBufferType type, uint size, uint o
 	m_pLastMappedAddress = NULL;
 
 	m_pStaticBuffer = NULL;
+	m_pWebStaging = NULL;
+	m_bWebHasData = false;
 	m_nPinnedMemoryOfs = -1;
 	m_nPersistentBufferStartOffset = 0;
 	m_bUsingPersistentBuffer = false;
@@ -574,6 +576,12 @@ CGLMBuffer::~CGLMBuffer( )
 		gGL->glDeleteBuffers( 1, &m_nHandle );
 	}
 	
+	if ( m_pWebStaging )
+	{
+		free( m_pWebStaging );
+		m_pWebStaging = NULL;
+	}
+
 	m_pCtx = NULL;
 	m_nHandle = 0;
 		
@@ -846,6 +854,26 @@ void CGLMBuffer::Lock( GLMBuffLockParams *pParams, char **pAddressOut )
 		// map
 		char *mapPtr;
 
+#ifdef __EMSCRIPTEN__
+		// WebGL has no buffer mapping. Emscripten's emulation hands back
+		// uninitialized malloc memory and uploads all of it on unmap, so any
+		// byte the engine doesn't rewrite (static mesh modifies, displacement
+		// index ranges) turned into garbage geometry and colors. Stage the
+		// range in CPU memory holding the buffer's current contents instead,
+		// and upload it with glBufferSubData on unlock.
+		m_pWebStaging = (char*)malloc( pParams->m_nSize );
+		if ( m_pWebStaging )
+		{
+			// D3D promises the locked range keeps its contents unless the lock
+			// discards or promises not to overwrite in-flight data.
+			if ( !pParams->m_bDiscard && !pParams->m_bNoOverwrite && m_bWebHasData && gGL->glGetBufferSubData )
+				gGL->glGetBufferSubData( m_buffGLTarget, pParams->m_nOffset, pParams->m_nSize, m_pWebStaging );
+			else
+				memset( m_pWebStaging, 0, pParams->m_nSize );
+		}
+		mapPtr = m_pWebStaging;
+#else
+
 		// m_bEnableAsyncMap is actually pParams->m_bNoOverwrite
 		GLbitfield parms = GL_MAP_WRITE_BIT | ( m_bEnableAsyncMap ? GL_MAP_UNSYNCHRONIZED_BIT : 0 ) | ( pParams->m_bDiscard ? GL_MAP_INVALIDATE_BUFFER_BIT : 0 ) | ( m_bEnableExplicitFlush ? GL_MAP_FLUSH_EXPLICIT_BIT : 0 );
 
@@ -854,6 +882,7 @@ void CGLMBuffer::Lock( GLMBuffLockParams *pParams, char **pAddressOut )
 #endif
 
 		mapPtr = (char*)gGL->glMapBufferRange( m_buffGLTarget, pParams->m_nOffset, pParams->m_nSize, parms);
+#endif
 
 #ifdef REPORT_LOCK_TIME
 		double flEnd = Plat_FloatTime();
@@ -1052,6 +1081,9 @@ void CGLMBuffer::Unlock( int nActualSize, const void *pActualData )
 				Assert( nActualSize <= (int)( m_dirtyMaxOffset - m_dirtyMinOffset ) );
 
 				glBufferSubDataMaxSize( m_buffGLTarget, m_dirtyMinOffset, nActualSize, pActualData ? pActualData : m_pStaticBuffer );
+#ifdef __EMSCRIPTEN__
+				m_bWebHasData = true;
+#endif
 
 		#ifdef REPORT_LOCK_TIME
 				double flEnd = Plat_FloatTime();
@@ -1100,6 +1132,22 @@ void CGLMBuffer::Unlock( int nActualSize, const void *pActualData )
 		}
 
 		m_pCtx->BindBufferToCtx( m_type, this );
+
+#ifdef __EMSCRIPTEN__
+		if ( m_pWebStaging )
+		{
+			if ( nActualSize )
+			{
+				gGL->glBufferSubData( m_buffGLTarget, m_dirtyMinOffset, nActualSize, m_pWebStaging );
+				m_bWebHasData = true;
+			}
+			free( m_pWebStaging );
+			m_pWebStaging = NULL;
+		}
+		m_dirtyMinOffset = m_dirtyMaxOffset = 0;
+		m_bMapped = false;
+		return;
+#endif
 
 		Assert( nActualSize <= (int)( m_dirtyMaxOffset - m_dirtyMinOffset ) );
 

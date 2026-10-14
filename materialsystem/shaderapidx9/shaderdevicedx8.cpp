@@ -1462,10 +1462,15 @@ bool CShaderDeviceMgrDx8::ValidateMode( int nAdapter, const ShaderDeviceInfo_t &
 		// settings
 		GetCurrentModeInfo( &displayMode, 0 );
 
+#ifndef __EMSCRIPTEN__
 		// make sure the window fits within the current video mode
+		// (In the browser the GL layer reports a fixed 640x480 display, while
+		// the canvas can be any size the page asks for; a page-sized window
+		// was rejected here and the engine quit before showing anything.)
 		if ( ( info.m_DisplayMode.m_nWidth > displayMode.m_nWidth ) ||
 			 ( info.m_DisplayMode.m_nHeight > displayMode.m_nHeight ) )
 			return false;
+#endif
 	}
 	else
 	{

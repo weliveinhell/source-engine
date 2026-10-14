@@ -1,0 +1,201 @@
+name: iOS Native Signed IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-signed-ios:
+    runs-on: macos-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout source and submodules
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Verify no retail Portal data is committed under native project
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find ios-native -type f \( \
+            -iname '*.vpk' -o -iname '*.bsp' -o -iname '*.vtf' -o -iname '*.vmt' -o \
+            -iname '*.vcs' -o -iname '*.wav' -o -iname '*.mp3' -o -iname '*.mdl' \
+          \) -print -quit | grep -q .; then
+            echo 'Retail/game asset file detected under ios-native/. Refusing signed package.' >&2
+            exit 1
+          fi
+
+      - name: Validate signing configuration
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+        run: |
+          set -euo pipefail
+          for value in BUILD_CERTIFICATE_BASE64 BUILD_PROVISION_PROFILE_BASE64 P12_PASSWORD KEYCHAIN_PASSWORD IOS_TEAM_ID IOS_BUNDLE_ID; do
+            if [ -z "${!value:-}" ]; then
+              echo "Missing required secret/variable: $value" >&2
+              exit 1
+            fi
+          done
+
+      - name: Install Apple certificate and provisioning profile
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          CERTIFICATE_PATH="$RUNNER_TEMP/build_certificate.p12"
+          PP_PATH="$RUNNER_TEMP/build_pp.mobileprovision"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          security cms -D -i "$PP_PATH" > "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")"
+          PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PP_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Configure signed Xcode project
+        env:
+          IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+        run: |
+          set -euxo pipefail
+          cmake -S ios-native -B build/ios -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DRENDER360_DEPLOYMENT_TARGET=15.0 \
+            -DRENDER360_BUNDLE_ID="$IOS_BUNDLE_ID" \
+            -DRENDER360_BUILD_IDENTIFIER="${GITHUB_SHA}" \
+            -DRENDER360_BUILD_NUMBER="${GITHUB_RUN_NUMBER}"
+
+      - name: Build signed arm64 app
+        env:
+          IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+          IOS_SIGNING_IDENTITY: ${{ vars.IOS_SIGNING_IDENTITY }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SIGNING_IDENTITY="${IOS_SIGNING_IDENTITY:-Apple Development}"
+          xcodebuild \
+            -project build/ios/Render360PortalIOS.xcodeproj \
+            -scheme Render360Portal \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
+            PROVISIONING_PROFILE="$PROFILE_UUID" \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS=arm64 \
+            build
+
+      - name: Verify signature and package IPA
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          resolve_app_path() {
+            local candidate
+            for candidate in \
+              build/ios/Release-iphoneos/Render360Portal.app \
+              build/DerivedData/Build/Products/Release-iphoneos/Render360Portal.app; do
+              if [ -d "$candidate" ]; then
+                printf '%s\n' "$candidate"
+                return 0
+              fi
+            done
+            find build -type d -path '*/Release-iphoneos/Render360Portal.app' -print -quit 2>/dev/null || true
+          }
+
+          APP_PATH="$(resolve_app_path)"
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo 'Render360 Portal: could not locate the signed iPhoneOS .app bundle.' >&2
+            find build -maxdepth 6 -type d -name '*.app' -print 2>/dev/null || true
+            exit 1
+          fi
+
+          EXECUTABLE="$APP_PATH/Render360Portal"
+          test -f "$EXECUTABLE"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign -d --entitlements :- "$APP_PATH" || true
+          test "$(lipo -archs "$EXECUTABLE")" = 'arm64'
+
+          python3 - "$APP_PATH/Info.plist" "${{ vars.IOS_BUNDLE_ID }}" <<'PY'
+          import plistlib
+          import sys
+
+          with open(sys.argv[1], 'rb') as handle:
+              info = plistlib.load(handle)
+          assert info.get('CFBundleIdentifier') == sys.argv[2]
+          assert info.get('CFBundleExecutable') == 'Render360Portal'
+          assert info.get('UIDeviceFamily') == [1]
+          assert info.get('CFBundleSupportedPlatforms') == ['iPhoneOS']
+          assert info.get('MinimumOSVersion') == '15.0'
+          assert info.get('UISupportedInterfaceOrientations') == [
+              'UIInterfaceOrientationLandscapeLeft',
+              'UIInterfaceOrientationLandscapeRight',
+          ]
+          print('Validated signed N0 bundle metadata')
+          PY
+
+          rm -rf build/ipa-signed
+          mkdir -p build/ipa-signed/Payload
+          ditto "$APP_PATH" build/ipa-signed/Payload/Render360Portal.app
+          (cd build/ipa-signed && /usr/bin/zip -qry ../Render360-Portal-iOS-signed.ipa Payload)
+          IPA=build/Render360-Portal-iOS-signed.ipa
+          test -s "$IPA"
+          /usr/bin/unzip -Z1 "$IPA" > build/signed-ipa-contents.txt
+          grep -qx 'Payload/Render360Portal.app/Render360Portal' build/signed-ipa-contents.txt
+          if grep -Eiq '\.(vpk|bsp|vtf|vmt|vcs|wav|mp3|mdl)$' build/signed-ipa-contents.txt; then
+            echo 'Retail/game asset extension detected inside signed IPA.' >&2
+            exit 1
+          fi
+          ls -lh "$IPA"
+
+      - name: Upload signed IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Render360-Portal-iOS-signed-${{ github.run_number }}
+          path: build/Render360-Portal-iOS-signed.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Clean up signing material
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if [ -n "${KEYCHAIN_PATH:-}" ] && [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+          if [ -n "${PROFILE_UUID:-}" ]; then
+            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision" || true
+          fi

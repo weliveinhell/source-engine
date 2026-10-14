@@ -152,6 +152,17 @@ def get_optimization_flags(conf):
 
 	cflags = conf.get_flags_by_type(CFLAGS, conf.options.BUILD_TYPE, conf.env.COMPILER_CC, conf.env.CC_VERSION[0])
 
+	# The browser release is constrained by iPhone WebContent/JIT memory, not by
+	# native desktop disk size. Compile every Wasm object/SIDE_MODULE for size as
+	# well as the final MAIN_MODULE. In particular, do not explicitly re-enable
+	# tree vectorization after -Os: it can expand the large client/server/engine
+	# modules and WebKit must then compile/JIT those larger bodies during startup.
+	if conf.env.DEST_OS == 'wasm' and conf.options.BUILD_TYPE == 'release':
+		cflags = [flag for flag in cflags if flag not in ('-O2', '-ftree-vectorize')]
+		if '-Os' not in cflags:
+			cflags.append('-Os')
+		Logs.pprint('CYAN', 'Render360 Portal: Emscripten release uses -Os for iPhone memory budget')
+
 	if conf.options.LTO:
 		linkflags+= conf.get_flags_by_compiler(LTO_LINKFLAGS, conf.env.COMPILER_CC)
 		cflags   += conf.get_flags_by_compiler(LTO_CFLAGS, conf.env.COMPILER_CC)

@@ -3,96 +3,551 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>yikes!</title>
-    <style>{{{ SHELL_CSS }}}</style>
-	<style>
-		body {
-			background: #111;
-			color: #fff;
-		}
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Portal">
+    <title>Portal</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --game-w: 100vw;
+        --game-h: 100vh;
+        --game-x: 0px;
+        --game-y: 0px;
+        --safe-t: env(safe-area-inset-top, 0px);
+        --safe-r: env(safe-area-inset-right, 0px);
+        --safe-b: env(safe-area-inset-bottom, 0px);
+        --safe-l: env(safe-area-inset-left, 0px);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      }
 
-		body #emscripten_logo {
-			width: 200px;
-		}
-	</style>
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        color: #f5f5f7;
+        overscroll-behavior: none;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-text-size-adjust: 100%;
+      }
+
+      /* The engine draws at a fixed size chosen in pre.js to match the screen's
+         shape. The page only scales that picture to fit. !important wins over
+         any inline size SDL or Emscripten writes onto the canvas. */
+      #canvas {
+        position: fixed;
+        left: var(--game-x) !important;
+        top: var(--game-y) !important;
+        width: var(--game-w) !important;
+        height: var(--game-h) !important;
+        display: block;
+        border: 0;
+        outline: none;
+        background: #000;
+        touch-action: none;
+      }
+
+      /* ---------- loading screen ---------- */
+      #r360-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        padding: calc(24px + var(--safe-t)) calc(24px + var(--safe-r)) calc(24px + var(--safe-b)) calc(24px + var(--safe-l));
+        background: radial-gradient(120% 90% at 50% 40%, #12161c 0%, #000 70%);
+        transition: opacity .45s ease, visibility .45s;
+      }
+      #r360-splash.r360-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+      #r360-logo { width: min(260px, 52vw); height: auto; opacity: .95; }
+
+      #r360-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; width: min(280px, 70vw); }
+      #r360-track { width: 100%; height: 3px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+      #r360-fill { width: 35%; height: 100%; border-radius: 3px; background: #4fc3f7; animation: r360-indeterminate 1.3s ease-in-out infinite; }
+      #r360-track.r360-determinate #r360-fill { animation: none; transition: width .2s; }
+      @keyframes r360-indeterminate { 0% { transform: translateX(-110%); } 100% { transform: translateX(300%); } }
+
+      #status {
+        min-height: 1.3em;
+        font-size: 13px;
+        color: rgba(245,245,247,.6);
+        text-align: center;
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #progress, #spinner { display: none !important; }
+
+      #r360-error { display: none; flex-direction: column; align-items: center; gap: 14px; max-width: min(460px, 86vw); text-align: center; }
+      #r360-splash.r360-failed #r360-error { display: flex; }
+      #r360-splash.r360-failed #r360-loading { display: none; }
+      #r360-error h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -.01em; }
+      #r360-error p { margin: 0; font-size: 13px; line-height: 1.45; color: rgba(245,245,247,.62); overflow-wrap: anywhere; max-height: 30vh; overflow: auto; }
+
+      .r360-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+      .r360-btn {
+        appearance: none;
+        border: 0;
+        border-radius: 12px;
+        padding: 11px 18px;
+        font: 600 15px -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        color: #000;
+        background: #f5f5f7;
+        cursor: pointer;
+      }
+      .r360-btn.r360-quiet { color: #f5f5f7; background: rgba(255,255,255,.14); }
+      .r360-btn:active { transform: scale(.97); opacity: .85; }
+
+      /* ---------- in-game menu ---------- */
+      #r360-menu-button {
+        position: fixed;
+        z-index: 30;
+        top: calc(8px + var(--safe-t));
+        left: 50%;
+        transform: translateX(-50%);
+        width: 44px;
+        height: 22px;
+        border: 0;
+        border-radius: 11px;
+        padding: 0;
+        background: rgba(0,0,0,.28);
+        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: blur(12px);
+        opacity: .55;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+      body.r360-playing #r360-menu-button { display: flex; }
+      #r360-menu-button i { width: 4px; height: 4px; border-radius: 50%; background: #fff; display: block; }
+
+      #r360-sheet {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0,0,0,.45);
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+      }
+      #r360-sheet.r360-open { display: flex; }
+      #r360-sheet-card {
+        width: min(320px, 80vw);
+        padding: 8px;
+        border-radius: 18px;
+        background: rgba(30,32,36,.82);
+        -webkit-backdrop-filter: blur(30px) saturate(1.6);
+        backdrop-filter: blur(30px) saturate(1.6);
+        box-shadow: 0 20px 60px rgba(0,0,0,.5);
+        display: flex;
+        flex-direction: column;
+      }
+      .r360-row {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: #f5f5f7;
+        font: 500 16px -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        text-align: left;
+        padding: 13px 14px;
+        border-radius: 11px;
+        width: 100%;
+        cursor: pointer;
+      }
+      .r360-row:active { background: rgba(255,255,255,.1); }
+      .r360-row.r360-danger { color: #ff6961; }
+      .r360-sep { height: 1px; margin: 2px 12px; background: rgba(255,255,255,.08); }
+      #render360_diagnostic_status { padding: 4px 14px 8px; font-size: 12px; color: rgba(245,245,247,.45); }
+      #r360-fullscreen-row[hidden] { display: none; }
+
+      /* ---------- rotate hint ---------- */
+      #r360-rotate {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #000;
+        font-size: 15px;
+        color: rgba(245,245,247,.8);
+      }
+      @media (orientation: portrait) and (pointer: coarse) {
+        body.r360-touch #r360-rotate { display: flex; }
+      }
+      #r360-rotate svg { width: 64px; height: 64px; animation: r360-turn 2.4s ease-in-out infinite; }
+      @keyframes r360-turn { 0%, 30% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
+    </style>
   </head>
   <body>
-    <a href="http://emscripten.org"><img id="emscripten_logo" src="assets/portal.svg"></a>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
 
-    <div class="spinner" id='spinner'></div>
-    <div class="emscripten" id="status">Downloading...</div>
-
-    <span id='controls'>
-      <span><input type="button" value="Fullscreen" onclick="Module.requestFullscreen(document.getElementById('pointerLock').checked, 
-                                                                                document.getElementById('resize').checked)">
-      </span>
-    </span>
-
-    <div class="emscripten">
-      <progress value="0" max="100" id="progress" hidden=1></progress>
+    <div id="r360-splash">
+      <img id="r360-logo" src="assets/portal.svg" alt="Portal">
+      <div id="r360-loading">
+        <div id="r360-track"><div id="r360-fill"></div></div>
+        <div id="status">Loading…</div>
+        <progress value="0" max="100" id="progress" hidden=1></progress>
+        <div id="spinner"></div>
+      </div>
+      <div id="r360-error">
+        <h1 id="r360-error-title">Portal stopped</h1>
+        <p id="r360-error-detail"></p>
+        <div class="r360-actions">
+          <button type="button" class="r360-btn" onclick="render360Exit()">Close</button>
+          <button type="button" class="r360-btn r360-quiet" onclick="render360CopyDiagnostics()">Copy diagnostics</button>
+        </div>
+      </div>
     </div>
 
-    <div class="emscripten_border">
-      <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+    <button type="button" id="r360-menu-button" aria-label="Menu" onclick="render360OpenSheet(true)"><i></i><i></i><i></i></button>
+
+    <div id="r360-sheet" onclick="if(event.target === this) render360OpenSheet(false)">
+      <div id="r360-sheet-card">
+        <button type="button" class="r360-row" onclick="render360OpenSheet(false)">Resume</button>
+        <div class="r360-sep"></div>
+        <span id="r360-fullscreen-row"><input type="button" class="r360-row" value="Fullscreen" onclick="render360OpenSheet(false); render360RequestFullscreen()"></span>
+        <button type="button" class="r360-row" id="r360-controller-row" onclick="render360OpenSheet(false); window.render360ToggleController && render360ToggleController()">Show controller</button>
+        <button type="button" class="r360-row" id="r360-quality-row" onclick="render360CycleQuality()">Graphics: Standard</button>
+        <button type="button" class="r360-row" onclick="render360CopyDiagnostics()">Copy diagnostics</button>
+        <div id="render360_diagnostic_status">Shares the engine log with the developer</div>
+        <div class="r360-sep"></div>
+        <button type="button" class="r360-row r360-danger" onclick="render360Exit()">Quit Portal</button>
+      </div>
     </div>
-    <textarea id="output" rows="8"></textarea>
+
+    <div id="r360-rotate">
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3"><rect x="20" y="6" width="24" height="52" rx="5"/><line x1="29" y1="50" x2="35" y2="50"/></svg>
+      <div>Rotate your iPhone to play</div>
+    </div>
 
     <script type='text/javascript'>
       var statusElement = document.getElementById('status');
       var progressElement = document.getElementById('progress');
       var spinnerElement = document.getElementById('spinner');
       var canvasElement = document.getElementById('canvas');
-      var outputElement = document.getElementById('output');
-      if (outputElement) outputElement.value = ''; // clear browser cache
+      var diagnosticStatusElement = document.getElementById('render360_diagnostic_status');
+      var splashElement = document.getElementById('r360-splash');
+      var trackElement = document.getElementById('r360-track');
+      var fillElement = document.getElementById('r360-fill');
 
-      // As a default initial behavior, pop up an alert when webgl context is lost. To make your
-      // application robust, you may want to override this behavior before shipping!
-      // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
+      var render360Touch = false;
+      try { render360Touch = navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches; } catch (_) {}
+      if (render360Touch) document.body.classList.add('r360-touch');
+
+      // iPhone Safari has no element fullscreen; hide the row instead of
+      // offering a button that cannot work.
+      (function () {
+        var el = document.documentElement;
+        if (!(el.requestFullscreen || el.webkitRequestFullscreen)) {
+          document.getElementById('r360-fullscreen-row').hidden = true;
+        }
+        if (!render360Touch) {
+          document.getElementById('r360-controller-row').hidden = true;
+        }
+      })();
+
+      // ---------------------------------------------------------- layout
+      // Scale the engine's picture to fit the visible screen, keeping its shape.
+      // pre.js already picked a render size with the screen's aspect ratio, so
+      // in landscape this fills the display edge to edge.
+      function render360GameAspect() {
+        var size = (typeof Module !== 'undefined' && Module.render360GameSize) || null;
+        if (size && size.width > 0 && size.height > 0) return size.width / size.height;
+        if (canvasElement.width > 300 && canvasElement.height > 150) return canvasElement.width / canvasElement.height;
+        return 16 / 9;
+      }
+
+      function render360Layout() {
+        var vv = window.visualViewport;
+        var vw = Math.round(vv ? vv.width : window.innerWidth);
+        var vh = Math.round(vv ? vv.height : window.innerHeight);
+        if (!vw || !vh) return;
+        var aspect = render360GameAspect();
+        var w = vw, h = Math.round(vw / aspect);
+        if (h > vh) { h = vh; w = Math.round(vh * aspect); }
+        var root = document.documentElement.style;
+        root.setProperty('--game-w', w + 'px');
+        root.setProperty('--game-h', h + 'px');
+        root.setProperty('--game-x', Math.round((vw - w) / 2) + 'px');
+        root.setProperty('--game-y', Math.round((vh - h) / 2) + 'px');
+      }
+      window.addEventListener('resize', render360Layout);
+      window.addEventListener('orientationchange', function () { setTimeout(render360Layout, 250); });
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', render360Layout);
+      render360Layout();
+
+      // Pinch and double-tap would zoom the page instead of reaching the game.
+      document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener('dblclick', function (e) { e.preventDefault(); }, { passive: false });
+
+      // ---------------------------------------------------------- splash
+      var render360SplashTimer = 0;
+      var render360Failed = false;
+
+      function render360HideSplash(delay) {
+        if (render360Failed || render360SplashTimer) return;
+        render360SplashTimer = setTimeout(function () {
+          if (render360Failed) return;
+          splashElement.classList.add('r360-hidden');
+          document.body.classList.add('r360-playing');
+          render360Layout();
+        }, delay || 0);
+      }
+
+      function render360ShowFailure(title, detail) {
+        render360Failed = true;
+        if (render360SplashTimer) clearTimeout(render360SplashTimer);
+        document.getElementById('r360-error-title').textContent = title;
+        document.getElementById('r360-error-detail').textContent = detail || '';
+        splashElement.classList.add('r360-failed');
+        splashElement.classList.remove('r360-hidden');
+        document.body.classList.remove('r360-playing');
+        render360OpenSheet(false);
+      }
+
+      // The engine starts drawing as soon as the renderer is up. Once startup
+      // gets that far, lift the loading screen and let the game's own loading
+      // panel take over.
+      function render360WatchStartup(line) {
+        try { if (window.render360ControllerSeeLine) window.render360ControllerSeeLine(line); } catch (_) {}
+        if (/filesystem BaseDir|IDirect3DDevice9::Create|create-ready:shaderapi|Precache:/i.test(line)) {
+          render360HideSplash(1500);
+        }
+        if (line.indexOf('[Render360 WebGL] context lost') >= 0) {
+          render360ShowFailure('iPhone ran out of graphics memory',
+            'iOS took the graphics context away while Portal was loading textures. Close other tabs and apps, then open Portal again. Copy diagnostics helps tune the next build.');
+        } else if (line.indexOf('[Render360 iOS guard]') >= 0) {
+          render360ShowFailure('Safari ran out of memory',
+            'iOS closed the game to free memory, so it was stopped instead of restarting in a loop. Close other tabs and apps, then open Portal again.');
+        } else if (/Aborted\(|native code called abort|RuntimeError:/i.test(line)) {
+          render360ShowFailure('Portal stopped', line.replace(/^\[stderr\]\s*/, '').slice(0, 400));
+        }
+      }
+
+      // ---------------------------------------------------------- menu
+      var RENDER360_QUALITY_NAMES = { standard: 'Standard', hd: 'HD', max: 'Max' };
+      var RENDER360_QUALITY_ORDER = ['standard', 'hd', 'max'];
+      function render360SavedQuality() {
+        var q = 'standard';
+        try { q = localStorage.getItem('render360Quality') || 'standard'; } catch (_) {}
+        return RENDER360_QUALITY_NAMES[q] ? q : 'standard';
+      }
+      function render360ShowQuality() {
+        var row = document.getElementById('r360-quality-row');
+        if (!row) return;
+        var saved = render360SavedQuality();
+        var running = (window.Module && Module.render360Quality) || saved;
+        row.textContent = 'Graphics: ' + RENDER360_QUALITY_NAMES[saved] +
+          (saved !== running ? ' (next launch)' : '');
+      }
+      // Resolution and texture size are fixed when the engine starts, so a new
+      // choice applies the next time Portal is opened.
+      function render360CycleQuality() {
+        var next = RENDER360_QUALITY_ORDER[(RENDER360_QUALITY_ORDER.indexOf(render360SavedQuality()) + 1) % RENDER360_QUALITY_ORDER.length];
+        try { localStorage.setItem('render360Quality', next); } catch (_) {}
+        render360ShowQuality();
+      }
+      function render360OpenSheet(open) {
+        if (open) render360ShowQuality();
+        document.getElementById('r360-sheet').classList.toggle('r360-open', !!open);
+      }
+
+      function render360Exit() {
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'render360-exit' }, location.origin);
+            return;
+          }
+        } catch (_) {}
+        location.href = './';
+      }
+
+      // ---------------------------------------------------------- diagnostics
+      // Keep exactly one recent event; the bounded log tail lives in pre.js.
+      var render360LatestOutput = '';
+      var RENDER360_OUTPUT_MAX_CHARS = 4096;
+      var RENDER360_LOG_MAX_CHARS = RENDER360_OUTPUT_MAX_CHARS;
+      var RENDER360_SHADER_DIAG_KEY = 'render360-missing-shader-v1';
+
+      function render360ShaderFamilyFromPath(path) {
+        var clean = String(path || '').replace(/\\/g, '/').toLowerCase();
+        var base = clean.slice(clean.lastIndexOf('/') + 1).replace(/\.vcs$/i, '');
+        return base.replace(/_(?:vs|ps|vsh|psh)[a-z0-9_]*$/i, '') || base;
+      }
+
+      function render360ObserveShaderLine(text) {
+        var line = String(text || '');
+        var match = line.match(/((?:portal\/|hl2\/|platform\/)?shaders\/(?:fxc|vsh|psh)\/[^\s"<>]+\.vcs)/i);
+        if (!match) return;
+        if (!/(?:missing|not found|couldn.t|cannot|can.t|failed|failure|unable|error|open failed)/i.test(line)) return;
+        var path = match[1].replace(/\\/g, '/');
+        var diagnostic = {
+          at: Date.now(),
+          path: path,
+          family: render360ShaderFamilyFromPath(path),
+          line: line.slice(-1024)
+        };
+        try { localStorage.setItem(RENDER360_SHADER_DIAG_KEY, JSON.stringify(diagnostic)); } catch (_) {}
+      }
+
+      try {
+        var navEntry = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+        if (navEntry && navEntry.type === 'navigate') localStorage.removeItem(RENDER360_SHADER_DIAG_KEY);
+      } catch (_) {}
+
+      function render360AppendOutput(text) {
+        var line = String(text || '');
+        render360ObserveShaderLine(line);
+        render360WatchStartup(line);
+        if (line.length > RENDER360_OUTPUT_MAX_CHARS) line = line.slice(-RENDER360_OUTPUT_MAX_CHARS);
+        render360LatestOutput = line;
+      }
+
+      function render360DiagnosticText() {
+        var lines = [
+          'Render360 Portal diagnostics',
+          'captured=' + new Date().toISOString(),
+          'url=' + location.href,
+          'status=' + (statusElement ? statusElement.textContent : ''),
+          'crossOriginIsolated=' + String(window.crossOriginIsolated === true),
+          'SharedArrayBuffer=' + typeof SharedArrayBuffer,
+          'OffscreenCanvas=' + typeof OffscreenCanvas,
+          'WebGL2=' + String(!!document.createElement('canvas').getContext('webgl2')),
+          'viewport=' + window.innerWidth + 'x' + window.innerHeight + '@' + (window.devicePixelRatio || 1) +
+            ' game=' + JSON.stringify((typeof Module !== 'undefined' && Module.render360GameSize) || null) +
+            ' quality=' + ((typeof Module !== 'undefined' && Module.render360Quality) || 'unknown'),
+          '',
+          '--- latest runtime event only ---',
+          render360LatestOutput || '<none>'
+        ];
+        try {
+          var crashState = localStorage.getItem('render360-ios-crash-state-v2');
+          if (crashState) lines.splice(9, 0, 'crashState=' + crashState);
+          var latestShader = localStorage.getItem(RENDER360_SHADER_DIAG_KEY);
+          if (latestShader) lines.splice(10, 0, 'latestMissingShader=' + latestShader);
+          var lastError = localStorage.getItem('render360-ios-last-error-v1');
+          if (lastError) lines.splice(11, 0, 'lastError=' + lastError);
+        } catch (_) {}
+        try {
+          var tail = typeof render360ReadLogTail === 'function' ? render360ReadLogTail() : [];
+          var notable = typeof render360ReadNotable === 'function' ? render360ReadNotable() : [];
+          if (notable && notable.length) lines.push('', '--- errors, fonts and audio (' + notable.length + ') ---', notable.join('\n'));
+          if (tail && tail.length) lines.push('', '--- engine log tail (last ' + tail.length + ' lines) ---', tail.join('\n'));
+        } catch (_) {}
+        return lines.join('\n');
+      }
+
+      async function render360CopyDiagnostics() {
+        var text = render360DiagnosticText();
+        try {
+          if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(text);
+          } else {
+            var temporary = document.createElement('textarea');
+            temporary.value = text;
+            temporary.setAttribute('readonly', '');
+            temporary.style.position = 'fixed';
+            temporary.style.opacity = '0';
+            document.body.appendChild(temporary);
+            temporary.select();
+            document.execCommand('copy');
+            temporary.remove();
+          }
+          if (diagnosticStatusElement) diagnosticStatusElement.textContent = 'Copied. Paste it into the chat.';
+          return true;
+        } catch (error) {
+          if (diagnosticStatusElement) diagnosticStatusElement.textContent = 'Copy failed: ' + String(error && error.message ? error.message : error);
+          return false;
+        }
+      }
+
+      function render360Report(kind, message, error) {
+        var stack = error && error.stack ? '\n' + error.stack : '';
+        if (stack.length > RENDER360_OUTPUT_MAX_CHARS) stack = stack.slice(-RENDER360_OUTPUT_MAX_CHARS);
+        var concise = '[Render360 ' + kind + '] ' + String(message || '<no message>');
+        var detail = concise + stack;
+        console.error(detail);
+        render360AppendOutput(detail);
+        try {
+          localStorage.setItem('render360-ios-last-error-v1', JSON.stringify({
+            at: Date.now(),
+            kind: String(kind || 'error'),
+            message: String(message || '<no message>').slice(-2048),
+            stack: stack.slice(-4096)
+          }));
+        } catch (_) {}
+        if (!/WebGL context restored/.test(kind)) render360ShowFailure('Portal stopped', String(message || kind));
+        return detail;
+      }
+
+      async function render360RequestFullscreen() {
+        try {
+          var target = document.documentElement;
+          var request = target.requestFullscreen || target.webkitRequestFullscreen;
+          if (typeof request !== 'function') return false;
+          var result = request.call(target);
+          if (result && typeof result.then === 'function') await result;
+          return true;
+        } catch (error) {
+          render360AppendOutput('[Render360 fullscreen] ' + (error && error.message ? error.message : String(error)));
+          return false;
+        }
+      }
+
       canvasElement.addEventListener('webglcontextlost', (e) => {
-        alert('WebGL context lost. You will need to reload the page.');
+        render360Report('WebGL context lost', e.statusMessage || 'The graphics context was lost. iOS does this under memory pressure.');
         e.preventDefault();
       }, false);
+      canvasElement.addEventListener('webglcontextrestored', () => {
+        render360AppendOutput('[Render360 WebGL context restored]');
+      }, false);
 
-	  canvasElement.widthNative = screen.availWidth
-	  canvasElement.heightNative = screen.availHeight
+      canvasElement.widthNative = screen.availWidth;
+      canvasElement.heightNative = screen.availHeight;
 
       var Module = {
         print(...args) {
-          console.log(...args);
-          // These replacements are necessary if you render to raw HTML
-          //text = text.replace(/&/g, "&amp;");
-          //text = text.replace(/</g, "&lt;");
-          //text = text.replace(/>/g, "&gt;");
-          //text = text.replace('\n', '<br>', 'g');
-          if (outputElement) {
-            var text = args.join(' ');
-            outputElement.value += text + "\n";
-            outputElement.scrollTop = outputElement.scrollHeight; // focus on bottom
-          }
+          render360AppendOutput(args.join(' '));
+        },
+        printErr(...args) {
+          render360AppendOutput('[stderr] ' + args.join(' '));
         },
         canvas: canvasElement,
         setStatus(text) {
-          Module.setStatus.last ??= { time: Date.now(), text: '' };
-          if (text === Module.setStatus.last.text) return;
+          text = String(text || '');
           var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
-          var now = Date.now();
-          // if this is a progress update, skip it if too soon
-          if (m && now - Module.setStatus.last.time < 30) return;
-          Module.setStatus.last.time = now;
-          Module.setStatus.last.text = text;
           if (m) {
-            text = m[1];
-            progressElement.value = parseInt(m[2])*100;
-            progressElement.max = parseInt(m[4])*100;
-            progressElement.hidden = false;
-            spinnerElement.hidden = false;
+            var done = parseFloat(m[2]), total = parseFloat(m[4]);
+            trackElement.classList.add('r360-determinate');
+            fillElement.style.width = (total > 0 ? Math.min(100, done / total * 100) : 0).toFixed(1) + '%';
+            text = m[1].trim();
           } else {
-            progressElement.value = null;
-            progressElement.max = null;
-            progressElement.hidden = true;
-            if (!text) spinnerElement.style.display = 'none';
+            trackElement.classList.remove('r360-determinate');
+            fillElement.style.width = '';
           }
-          statusElement.innerHTML = text;
+          if (/^Downloading/i.test(text)) text = 'Downloading Portal…';
+          else if (/^Preparing|All downloads complete/i.test(text)) text = 'Starting Portal…';
+          if (text) statusElement.textContent = text;
         },
         totalDependencies: 0,
         monitorRunDependencies(left) {
@@ -101,15 +556,46 @@
         }
       };
       Module.setStatus('Downloading...');
-      window.onerror = (event) => {
-        // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
-        Module.setStatus('Exception thrown, see JavaScript console');
-        spinnerElement.style.display = 'none';
-        Module.setStatus = (text) => {
-          if (text) console.error('[post-exception status] ' + text);
-        };
+
+      window.onerror = (message, source, lineno, colno, error) => {
+        render360Report(
+          'Portal JS exception',
+          String(message) + ' @ ' + String(source || '<unknown>') + ':' + String(lineno || 0) + ':' + String(colno || 0),
+          error
+        );
+        return false;
       };
+
+      window.addEventListener('unhandledrejection', (event) => {
+        var reason = event.reason;
+        render360Report(
+          'Portal unhandled rejection',
+          reason && reason.message ? reason.message : String(reason),
+          reason
+        );
+      });
+
+      render360AppendOutput('[Render360 baseline] crossOriginIsolated=' + String(window.crossOriginIsolated) +
+        ' SharedArrayBuffer=' + typeof SharedArrayBuffer +
+        ' OffscreenCanvas=' + typeof OffscreenCanvas);
+
+      if (!window.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
+        // Usually the start page's service worker wasn't in control yet (Safari
+        // right after a deploy). Reload the whole page once so it is; the time
+        // guard stops a loop where isolation is impossible (Private tabs).
+        var render360LastIsolationReload = 0;
+        try { render360LastIsolationReload = Number(sessionStorage.getItem('render360PagesReloadAt')) || 0; } catch (_) {}
+        if (Date.now() - render360LastIsolationReload > 20000) {
+          try { sessionStorage.setItem('render360PagesReloadAt', String(Date.now())); } catch (_) {}
+          render360AppendOutput('[Render360 baseline] not isolated; reloading the start page');
+          try { (window.top || window).location.reload(); } catch (_) { window.location.reload(); }
+          throw new Error('Render360: reloading for cross-origin isolation');
+        }
+        render360ShowFailure('Portal can’t start here',
+          'This page is not cross-origin isolated, so threads are unavailable. Open it from the Portal start page, not a Private tab.');
+      }
     </script>
+    <script src="assets/r360-controller.js"></script>
     {{{ SCRIPT }}}
   </body>
 </html>

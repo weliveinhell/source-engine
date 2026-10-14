@@ -3,6 +3,8 @@
 
 from waflib import Utils
 import os
+import subprocess
+import sys
 
 top = '.'
 PROJECT_NAME = 'filesystem_stdio'
@@ -19,6 +21,10 @@ def configure(conf):
 	conf.define('SUPPORT_PACKED_STORE',1)
 
 def build(bld):
+	if bld.env.DEST_OS == 'wasm':
+		patch = os.path.join(bld.path.abspath(), 'render360_browser_file_patch.py')
+		subprocess.check_call([sys.executable, patch])
+
 	source = [
 		'basefilesystem.cpp',
 		'packfile.cpp',

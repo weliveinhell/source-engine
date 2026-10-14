@@ -1,0 +1,135 @@
+name: iOS Native Bootstrap IPA
+on:
+  push:
+    branches: [render360/ios-native]
+    paths:
+      - 'ios-native/**'
+      - 'tier0/**'
+      - 'tier1/**'
+      - 'mathlib/**'
+      - 'common/**'
+      - 'public/**'
+      - '.github/workflows/ios-native.yml'
+      - 'docs/IOS_NATIVE_**'
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  build-ios-native:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source and submodules
+        uses: actions/checkout@v6
+        with: { submodules: recursive, fetch-depth: 1 }
+      - name: Print toolchain
+        run: |
+          set -euxo pipefail
+          xcodebuild -version; cmake --version; clang --version
+      - name: Verify native source boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find ios-native -type f \( -iname '*.vpk' -o -iname '*.bsp' -o -iname '*.vtf' -o -iname '*.vmt' -o -iname '*.vcs' -o -iname '*.wav' -o -iname '*.mp3' -o -iname '*.mdl' \) -print -quit | grep -q .; then echo 'Retail game asset detected.' >&2; exit 1; fi
+          if grep -RInE '__EMSCRIPTEN__|MEMFS|WORKERFS|SharedArrayBuffer|PROXY_TO_PTHREAD|OffscreenCanvas' ios-native/Sources ios-native/SourceCompat ios-native/CMakeLists.txt ios-native/cmake; then echo 'Browser runtime dependency entered native target.' >&2; exit 1; fi
+          grep -q 'add_library(r360_tier0 STATIC' ios-native/cmake/SourceFoundation.cmake
+          grep -q 'add_library(r360_tier1 STATIC' ios-native/cmake/SourceFoundation.cmake
+          grep -q 'add_library(r360_mathlib STATIC' ios-native/cmake/SourceFoundation.cmake
+      - name: Configure Xcode arm64 iPhone project
+        run: |
+          set -euxo pipefail
+          cmake -S ios-native -B build/ios -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 -DRENDER360_DEPLOYMENT_TARGET=15.0 -DRENDER360_BUNDLE_ID=com.render360.portal -DRENDER360_BUILD_IDENTIFIER="${GITHUB_SHA}" -DRENDER360_BUILD_NUMBER="${GITHUB_RUN_NUMBER}"
+      - name: Verify pinned SDL2 and generated iPhoneOS settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fx 'version=2.32.10' build/ios/render360-sdl2-version.txt
+          grep -Fx 'commit=5d249570393f7a37e037abf22cd6012a4cc56a71' build/ios/render360-sdl2-version.txt
+          grep -Fx 'sha256=5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165' build/ios/render360-sdl2-version.txt
+          xcodebuild -project build/ios/Render360PortalIOS.xcodeproj -scheme Render360Portal -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -showBuildSettings | tee build/xcode-build-settings.txt
+          grep -Eq '^[[:space:]]*ARCHS = arm64$' build/xcode-build-settings.txt
+          grep -Eq '^[[:space:]]*IPHONEOS_DEPLOYMENT_TARGET = 15\.0$' build/xcode-build-settings.txt
+          grep -Eq '^[[:space:]]*PRODUCT_BUNDLE_IDENTIFIER = com\.render360\.portal$' build/xcode-build-settings.txt
+          grep -Eq '^[[:space:]]*SUPPORTED_PLATFORMS = iphoneos$' build/xcode-build-settings.txt
+          grep -Eq '^[[:space:]]*TARGETED_DEVICE_FAMILY = 1$' build/xcode-build-settings.txt
+          grep -Eq '^[[:space:]]*SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO$' build/xcode-build-settings.txt
+          grep -Eq '^[[:space:]]*SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO$' build/xcode-build-settings.txt
+      - name: Build N2 Source foundation in dependency order
+        shell: bash
+        run: |
+          set -euxo pipefail
+          for target in r360_tier0 r360_tier1 r360_mathlib; do
+            echo "=== building ${target} ==="
+            xcodebuild -project build/ios/Render360PortalIOS.xcodeproj -target "${target}" -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO ONLY_ACTIVE_ARCH=NO ARCHS=arm64 build
+          done
+      - name: Verify N2 static ARM64 products
+        shell: bash
+        run: |
+          set -euxo pipefail
+          : > build/foundation-libraries.txt
+          for stem in tier0_ios tier1_ios mathlib_ios; do
+            lib="$(find build/ios -type f -name "lib${stem}.a" -print -quit)"
+            test -n "$lib"
+            archs="$(lipo -archs "$lib")"
+            test "$archs" = arm64
+            echo "${stem}=${lib} arch=${archs}" | tee -a build/foundation-libraries.txt
+          done
+          if grep -Eq '(^|[[:space:]])(i386|x86_64)([[:space:]]|$)' build/foundation-libraries.txt; then exit 1; fi
+      - name: Build unsigned arm64 N2 app
+        run: |
+          set -euxo pipefail
+          xcodebuild -project build/ios/Render360PortalIOS.xcodeproj -scheme Render360Portal -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO ONLY_ACTIVE_ARCH=NO ARCHS=arm64 build
+      - name: Verify N2 bundle and package unsigned IPA
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP_PATH=build/ios/Release-iphoneos/Render360Portal.app
+          if [ ! -d "$APP_PATH" ]; then APP_PATH=build/DerivedData/Build/Products/Release-iphoneos/Render360Portal.app; fi
+          test -f "$APP_PATH/Render360Portal"
+          lipo -archs "$APP_PATH/Render360Portal" | tee build/architecture.txt
+          test "$(cat build/architecture.txt)" = arm64
+          nm "$APP_PATH/Render360Portal" | grep -q '_SDL_Init'
+          python3 - "$APP_PATH/Info.plist" <<'PY'
+          import plistlib,sys
+          with open(sys.argv[1],'rb') as f: info=plistlib.load(f)
+          assert info.get('CFBundleIdentifier')=='com.render360.portal'
+          assert info.get('CFBundleExecutable')=='Render360Portal'
+          assert info.get('UIRequiresFullScreen') is True
+          assert info.get('UIFileSharingEnabled') is True
+          assert info.get('LSSupportsOpeningDocumentsInPlace') is True
+          assert info.get('UISupportedInterfaceOrientations')==['UIInterfaceOrientationLandscapeLeft','UIInterfaceOrientationLandscapeRight']
+          assert info.get('UIRequiredDeviceCapabilities')==['arm64']
+          assert info.get('UIDeviceFamily')==[1]
+          assert info.get('CFBundleSupportedPlatforms')==['iPhoneOS']
+          assert info.get('MinimumOSVersion')=='15.0'
+          assert not any(k.startswith('NS') and k.endswith('UsageDescription') for k in info)
+          PY
+          rm -rf build/ipa; mkdir -p build/ipa/Payload; ditto "$APP_PATH" build/ipa/Payload/Render360Portal.app
+          cat > build/ipa/BUILD_INFO.txt <<INFO
+          Render360 Portal native iOS N2 Source foundation
+          commit=${GITHUB_SHA}
+          sdl=2.32.10
+          sdl_commit=5d249570393f7a37e037abf22cd6012a4cc56a71
+          source_foundation=tier0,tier1,mathlib
+          sdk=iphoneos
+          deployment=15.0
+          arch=arm64
+          signing=unsigned
+          retail_assets=bundled:no
+          INFO
+          (cd build/ipa && /usr/bin/zip -qry ../Render360-Portal-iOS-unsigned.ipa Payload BUILD_INFO.txt)
+          /usr/bin/unzip -Z1 build/Render360-Portal-iOS-unsigned.ipa | tee build/ipa-contents.txt
+          grep -qx 'Payload/Render360Portal.app/Render360Portal' build/ipa-contents.txt
+          if grep -Eiq '\.(vpk|bsp|vtf|vmt|vcs|wav|mp3|mdl)$' build/ipa-contents.txt; then exit 1; fi
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Render360-Portal-iOS-unsigned-${{ github.run_number }}
+          path: |
+            build/Render360-Portal-iOS-unsigned.ipa
+            build/architecture.txt
+            build/foundation-libraries.txt
+            build/xcode-build-settings.txt
+            build/ipa-contents.txt
+            build/ios/render360-sdl2-version.txt
+          if-no-files-found: error
+          retention-days: 30

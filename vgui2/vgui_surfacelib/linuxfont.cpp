@@ -467,9 +467,16 @@ char *TryFindFont(const char *winFontName, bool bBold, int italic)
 	bool bRegularPostfix = false;
 	fontName = "dejavusans";
 
+#ifdef __EMSCRIPTEN__
+	// pre.js writes the fallback fonts here before main(). Absolute, so the
+	// lookup does not depend on which search paths the game mounted.
+	#define R360_FONT_DIR "/platform/resource/linux_fonts"
+#else
+	#define R360_FONT_DIR "platform/resource/linux_fonts"
+#endif
 	if( strcmp( winFontName, "Courier New") == 0 )
 	{
-		strncpy(fontFile, "platform/resource/linux_fonts/liberationmono-regular.ttf", sizeof(fontFile));
+		strncpy(fontFile, R360_FONT_DIR "/liberationmono-regular.ttf", sizeof(fontFile));
 		return fontFile;
 	}
 
@@ -486,9 +493,9 @@ char *TryFindFont(const char *winFontName, bool bBold, int italic)
 		fontNamePost = NULL;
 
 	if( fontNamePost )
-		snprintf(fontFile, sizeof fontFile, "platform/resource/linux_fonts/%s-%s.ttf", fontName, fontNamePost);
+		snprintf(fontFile, sizeof fontFile, R360_FONT_DIR "/%s-%s.ttf", fontName, fontNamePost);
 	else
-		snprintf(fontFile, sizeof fontFile, "platform/resource/linux_fonts/%s.ttf", fontName );
+		snprintf(fontFile, sizeof fontFile, R360_FONT_DIR "/%s.ttf", fontName );
 
 	return fontFile;
 #endif
@@ -630,9 +637,20 @@ void CLinuxFont::GetCharRGBA( wchar_t ch, int rgbaWide, int rgbaTall, unsigned c
 				int rgbaOffset = 4 * ( x + m_iBlur ); // +(rgbaTall-y-1)*rgbaWide*4
 				uint32 alpha = Min( 255U, alpha_scale * bitmap.buffer[ x + y * bitmap.pitch ] );
 
+#ifdef __EMSCRIPTEN__
+				// Coverage in colour as well as alpha, the way Win32Font fills
+				// glyphs. On iPhone the font pages reach the screen without
+				// their alpha, and white-everywhere glyphs then draw as solid
+				// boxes; with coverage in RGB the letters stay readable, and
+				// additive fonts (ONE, ONE blending) come out correct.
+				rgba[ rgbaOffset + 0 ] =  alpha;
+				rgba[ rgbaOffset + 1 ] =  alpha;
+				rgba[ rgbaOffset + 2 ] =  alpha;
+#else
 				rgba[ rgbaOffset + 0 ] =  255;
 				rgba[ rgbaOffset + 1 ] =  255;
 				rgba[ rgbaOffset + 2 ] =  255;
+#endif
 				rgba[ rgbaOffset + 3 ] =  alpha;
 			}
 			rgba += ( rgbaWide * 4 );

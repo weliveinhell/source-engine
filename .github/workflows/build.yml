@@ -1,23 +1,377 @@
-name: Build
+name: Render360 Portal iPhone Baseline
 
-on: [push, pull_request]
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - render360/iphone-baseline-lowmem
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: portal-iphone-baseline-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-wasm:
+    name: Build upstream threaded Portal runtime
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
-    - uses: actions/checkout@v2
-      with:
-        submodules: recursive
-    - name: Build wasm
-      run: |
-        source emscripten/get_emscripten.sh
-        emmake emscripten/build.sh
-        cd build/install/
-        zip -r ../../out.zip *
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: release.zip
-        path: out.zip
+      - name: Checkout Source fork
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Verify upstream baseline architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f emscripten/build.sh
+          grep -q -- '-sSHARED_MEMORY=1' emscripten/build.sh
+          grep -q -- '-sUSE_PTHREADS' emscripten/build.sh
+          grep -q -- '-sPTHREAD_POOL_SIZE=2' emscripten/build.sh
+          grep -q -- '-sPTHREAD_POOL_SIZE_STRICT=0' emscripten/build.sh
+          grep -q -- '-sPROXY_TO_PTHREAD' emscripten/build.sh
+          grep -q -- '-sOFFSCREENCANVASES_TO_PTHREAD' emscripten/build.sh
+          grep -q -- '-sMAIN_MODULE' emscripten/build.sh
+          grep -q -- '-sINCLUDE_FULL_LIBRARY=1' emscripten/build.sh
+          grep -q -- '-Os' emscripten/build.sh
+          grep -q -- '-sMALLOC=dlmalloc' emscripten/build.sh
+          grep -q -- '-sDEFAULT_PTHREAD_STACK_SIZE=1mb' emscripten/build.sh
+          grep -q -- '-sINITIAL_MEMORY=384mb' emscripten/build.sh
+          grep -q -- '-sALLOW_MEMORY_GROWTH=1' emscripten/build.sh
+          grep -q -- '-sMAXIMUM_MEMORY=1024mb' emscripten/build.sh
+          grep -q -- '-sMEMORY_GROWTH_LINEAR_STEP=32mb' emscripten/build.sh
+          if grep -q -- '--preload-file' emscripten/build.sh; then
+            echo 'Render360 Portal: side modules returned to the MEMFS preload package; they must stay on-demand dlopen.' >&2
+            exit 1
+          fi
+          grep -q -- '-lworkerfs.js' emscripten/build.sh
+          grep -q -- 'phase3-workerfs.js' emscripten/build.sh
+          grep -Fq 'EMCC_FORCE_STDLIBS=libc,libc++,libc++abi' emscripten/build.sh
+          if grep -q -- '-sMALLOC=mimalloc' emscripten/build.sh; then
+            echo 'Render360 Portal: mimalloc returned to the iPhone release profile.' >&2
+            exit 1
+          fi
+          # --profiling-funcs is deliberately on while iPhone crashes are being
+          # traced: it is the only way Safari's Wasm stacks show function names.
+          if grep -q 'link_libs=' emscripten/build.sh; then
+            echo 'Render360 Portal: SIDE_MODULEs were returned to load-time linking; Source requires runtime dlopen.' >&2
+            exit 1
+          fi
+          grep -q 'Atomics.store' emscripten/pre.js
+          grep -q 'streamDataResponse' emscripten/pre.js
+          grep -q 'response.body.getReader' emscripten/pre.js
+          grep -q 'createDataFile' emscripten/pre.js
+          grep -q 'await this.loadBootOverlay()' emscripten/pre.js
+          grep -q 'render360-ios-crash-state-v2' emscripten/pre.js
+          grep -q 'probable-process-kill-reload' emscripten/pre.js
+          grep -q 'render360ResidentBytes' emscripten/pre.js
+          grep -q 'Render360: loaded module:' emscripten/build.sh
+          grep -q "conf.env.DEST_OS == 'wasm'" scripts/waifulib/compiler_optimizations.py
+          grep -q "cflags.append('-Os')" scripts/waifulib/compiler_optimizations.py
+          if grep -q 'background preload failed' emscripten/pre.js; then
+            echo 'Render360 Portal: speculative next-map preload returned unexpectedly.' >&2
+            exit 1
+          fi
+          grep -q 'Portal JS exception' emscripten/shell.html
+          grep -q 'RENDER360_OUTPUT_MAX_CHARS' emscripten/shell.html
+          grep -q 'libsourcevr.so' emscripten/build.sh
+          grep -q 'libstdshader_dx9.so' emscripten/build.sh
+          grep -q 'BOOT_OVERLAY_PATH' emscripten/render360-pages-sw.js
+          grep -q 'local-boot' emscripten/render360-pages-sw.js
+          grep -q 'fetchLauncherDataDirect' emscripten/render360-pages-sw.js
+          grep -q 'WORKERFS' emscripten/phase3-workerfs.js
+          grep -q 'render360-direct-vpk' emscripten/phase3-workerfs.js
+          grep -q 'background1 chunk preload is disabled' emscripten/phase3-workerfs.js
+
+      - name: Validate dual-source staging JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check emscripten/portal-local-vpk.js
+          node --check emscripten/portal-boot-overlay.js
+          node --check emscripten/render360-pages-sw.js
+          node --check emscripten/pre.js
+          node --check emscripten/phase3-workerfs.js
+          node --check emscripten/assets/phase3-staging.js
+          grep -q 'debugluxelsnoalpha.vtf' emscripten/portal-boot-overlay.js
+          grep -q 'identitylightwarp.vtf' emscripten/portal-boot-overlay.js
+          grep -q 'normalizedrandomdirections2d.vtf' emscripten/portal-boot-overlay.js
+          grep -q 'Launch Phase 3' emscripten/assets/phase3-staging.js
+          grep -q 'render360Phase3DirectSelected' emscripten/assets/phase3-staging.js
+          grep -q 'render360-retail-request' emscripten/assets/phase3-staging.js
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path('emscripten/pages-index.html').read_text()
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', html, flags=re.S)
+          inline = [s for s in scripts if s.strip()]
+          if not inline:
+              raise SystemExit('no inline staging script found')
+          Path('/tmp/render360-pages-inline.js').write_text(inline[-1])
+          PY
+          node --check /tmp/render360-pages-inline.js
+
+      - name: Install pinned upstream Emscripten environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          source emscripten/get_emscripten.sh
+          emcc -v
+          echo "EMSDK=$EMSDK" >> "$GITHUB_ENV"
+          echo "$EMSDK" > "$RUNNER_TEMP/render360-emsdk-path.txt"
+
+      - name: Build upstream release
+        shell: bash
+        run: |
+          set -euo pipefail
+          source emsdk/emsdk_env.sh
+          bash emscripten/build.sh release
+
+      - name: Check wasm link closure
+        shell: bash
+        run: |
+          # Every module must find every C++ symbol it imports in another
+          # module, or the phone aborts with "undefined symbol" at load.
+          python3 scripts/check_wasm_links.py build/install
+
+      - name: Validate runtime and prepare staging site
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -s build/install/hl2_launcher.html
+          test -s build/install/hl2_launcher.js
+          test -s build/install/hl2_launcher.wasm
+          # Side modules are fetched by dlopen at runtime, so they must be on disk
+          # next to the page rather than referenced from a preload package.
+          test ! -e build/install/hl2_launcher.data
+          test -s build/install/liblauncher.so
+          test -s build/install/libengine.so
+          test -s build/install/libfilesystem_stdio.so
+          test -s build/install/libclient.so
+          test -s build/install/libserver.so
+          grep -a -q 'probable-process-kill-reload' build/install/hl2_launcher.js
+          grep -a -q 'render360SharedModules' build/install/hl2_launcher.js
+          grep -a -q 'sharedModules' build/install/hl2_launcher.js
+          test -s build/install/render360-wasm-side-modules.txt
+          test -s build/install/fonts/dejavusans.ttf
+          test -s build/install/fonts/dejavusans-bold.ttf
+          test -s build/install/fonts/dejavusansmono.ttf
+          test -s build/install/assets/r360-controller.js
+          grep -q 'assets/r360-controller.js' build/install/hl2_launcher.html
+          grep -a -q 'render360-direct-vpk' build/install/hl2_launcher.js
+          grep -a -q 'WORKERFS' build/install/hl2_launcher.js
+          test -s emscripten/portal-local-vpk.js
+          test -s emscripten/portal-boot-overlay.js
+          test -s emscripten/assets/phase3-staging.js
+          grep -q 'Portal JS exception' build/install/hl2_launcher.html
+          grep -q 'chunks/${mapName}.data' emscripten/pre.js
+          grep -q 'streamDataResponse' emscripten/pre.js
+
+          python3 - <<'PY'
+          from pathlib import Path
+          mib = 1024 * 1024
+          wasm = Path('build/install/hl2_launcher.wasm').stat().st_size
+          data_path = Path('build/install/hl2_launcher.data')
+          data = data_path.stat().st_size if data_path.exists() else 0
+          side = sum(p.stat().st_size for p in Path('build/install').glob('*.so'))
+          print(f'Render360 deploy sizes: main_wasm={wasm/mib:.1f} MiB data={data/mib:.1f} MiB side_modules={side/mib:.1f} MiB')
+          if wasm > 8 * mib:
+              raise SystemExit('Render360 Portal: MAIN_MODULE exceeded 8 MiB iPhone size budget')
+          if data > 64 * mib:
+              raise SystemExit('Render360 Portal: preload package exceeded 64 MiB iPhone size budget')
+          if side > 80 * mib:
+              raise SystemExit('Render360 Portal: Wasm SIDE_MODULE set exceeded 80 MiB iPhone size budget')
+          PY
+
+          if find build/install -type f -path '*/chunks/*.data' -print -quit | grep -q .; then
+            echo 'Refusing to publish bundled Portal .data chunks.' >&2
+            exit 1
+          fi
+
+          cp emscripten/pages-index.html build/install/index.html
+          cp emscripten/render360-pages-sw.js build/install/render360-pages-sw.js
+          cp emscripten/portal-local-vpk.js build/install/portal-local-vpk.js
+          cp emscripten/portal-boot-overlay.js build/install/portal-boot-overlay.js
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('build/install/index.html')
+          text = path.read_text()
+
+          def replace_once(old, new, label):
+              global text
+              if old not in text:
+                  raise SystemExit(f'Render360 Portal: {label} changed unexpectedly')
+              text = text.replace(old, new, 1)
+
+          old = '<script src="./portal-local-vpk.js"></script>'
+          replace_once(
+              old,
+              old + '\n<script src="./portal-boot-overlay.js"></script>\n<script src="./assets/phase3-staging.js"></script>',
+              'local VPK script tag'
+          )
+
+          old = "const registration=await navigator.serviceWorker.register('./render360-pages-sw.js',{scope:'./'});"
+          new = "const registration=await navigator.serviceWorker.register('./render360-pages-sw.js',{scope:'./',updateViaCache:'none'});await registration.update();"
+          replace_once(old, new, 'service-worker registration')
+
+          old = (
+              "        $('buildLocal').disabled=!selectedFromFolder;\n"
+              "        await refresh(false);\n"
+              "        if(!lastChunkProbe.ok&&selectedFromFolder)await buildLocalFallback(true);"
+          )
+          new = (
+              "        $('buildLocal').disabled=!selectedFromFolder;\n"
+              "        $('launch').disabled=true;\n"
+              "        if(selectedFromFolder&&globalThis.Render360PortalBootOverlay&&!globalThis.render360Phase3DirectSelected){\n"
+              "          try{\n"
+              "            const boot=await Render360PortalBootOverlay.build(selectedPortalFiles,{log});\n"
+              "            log('Local VPK boot overlay complete:',boot);\n"
+              "          }catch(error){\n"
+              "            log('Local VPK boot overlay failed:',error?.stack||String(error));\n"
+              "          }\n"
+              "        }\n"
+              "        if(globalThis.render360Phase3DirectSelected){\n"
+              "          log('Phase 3 direct VPK selected; skipped Phase 2 boot/chunk cache preparation.');\n"
+              "        }\n"
+              "        await refresh(false);\n"
+              "        if(!lastChunkProbe.ok&&selectedFromFolder&&!globalThis.render360Phase3DirectSelected)await buildLocalFallback(true);"
+          )
+          replace_once(old, new, 'ownership-success flow')
+
+          old = (
+              "    const localReady=await localChunkReady();\n"
+              "    if(localReady)set('localStatus',true,'ready from your VPKs');"
+          )
+          new = (
+              "    const localReady=await localChunkReady();\n"
+              "    const bootReady=!!globalThis.Render360PortalBootOverlay&&await Render360PortalBootOverlay.hasOverlay();\n"
+              "    if(localReady)set('localStatus',true,'ready from your VPKs');"
+          )
+          replace_once(old, new, 'local readiness block')
+
+          replace_once(
+              'const ready=threadReady&&runtimeReady&&verified&&chunk.ok;',
+              'const ready=threadReady&&runtimeReady&&verified&&chunk.ok&&bootReady&&!buildingLocal;',
+              'staging launch readiness expression'
+          )
+
+          old = (
+              "    if(!verified)$('launchHint').textContent='Verify your Portal folder first.';\n"
+              "    else if(!threadReady||!runtimeReady)$('launchHint').textContent='Portal is verified, but the threaded Pages runtime is not ready.';\n"
+              "    else if(chunk.ok&&chunk.source==='local-vpk')"
+          )
+          new = (
+              "    if(!verified)$('launchHint').textContent='Verify your Portal folder first.';\n"
+              "    else if(!threadReady||!runtimeReady)$('launchHint').textContent='Portal is verified, but the threaded Pages runtime is not ready.';\n"
+              "    else if(!bootReady)$('launchHint').textContent='Choose the full Portal folder once to prepare the shared Source boot textures required before the first frame.';\n"
+              "    else if(chunk.ok&&chunk.source==='local-vpk')"
+          )
+          replace_once(old, new, 'launch hint block')
+
+          old = "$('launch').addEventListener('click',()=>{location.href='./hl2_launcher.html'});"
+          new = "$('launch').addEventListener('click',()=>{location.href='./hl2_launcher.html?render360='+Date.now()});"
+          replace_once(old, new, 'launcher navigation')
+
+          path.write_text(text)
+          PY
+
+          grep -q 'portal-boot-overlay.js' build/install/index.html
+          grep -q 'assets/phase3-staging.js' build/install/index.html
+          grep -q 'render360Phase3DirectSelected' build/install/index.html
+          grep -q 'skipped Phase 2 boot/chunk cache preparation' build/install/index.html
+          grep -q 'Render360PortalBootOverlay.build' build/install/index.html
+          grep -q 'Render360PortalBootOverlay.hasOverlay' build/install/index.html
+          grep -q 'chunk.ok&&bootReady&&!buildingLocal' build/install/index.html
+          grep -q "updateViaCache:'none'" build/install/index.html
+          grep -q "registration.update()" build/install/index.html
+          grep -q "hl2_launcher.html?render360=" build/install/index.html
+          test -s build/install/assets/phase3-staging.js
+
+          touch build/install/.nojekyll
+
+          cat > build/install/render360-baseline.json <<JSON
+          {
+            "repository": "${GITHUB_REPOSITORY}",
+            "commit": "${GITHUB_SHA}",
+            "runtimeModel": "pthreads-shared-memory-runtime-dlopen",
+            "sideModuleDelivery": "on-demand-dlopen",
+            "initialMemoryMiB": 384,
+            "maximumMemoryMiB": 1024,
+            "memoryGrowthMiB": 32,
+            "memoryGrowth": true,
+            "growableArrayBuffers": false,
+            "allocator": "dlmalloc",
+            "pthreadPoolSize": 2,
+            "defaultPthreadStackMiB": 1,
+            "releaseLinkOptimization": "-Os",
+            "sideModuleOptimization": "-Os",
+            "streamedPortalDataFallback": true,
+            "directRetailVpk": true,
+            "directRetailBackend": "workerfs-file-blob",
+            "sameDocumentFileOwner": "staging-parent-with-runtime-iframe",
+            "background1MemfsPreloadInPhase3": false,
+            "crashLoopGuard": true,
+            "bootAssetOverlay": "phase2-compatibility-fallback",
+            "diagnostics": true,
+            "pagesIsolation": "service-worker-staging-only",
+            "runtimeChunkPath": "chunks/<map>.data",
+            "chunkSources": ["local-vpk-cache", "original-yikes-host"],
+            "bundledPortalRetailData": false
+          }
+          JSON
+
+          (cd build/install && zip -9 -r "$GITHUB_WORKSPACE/Render360-Portal-iPhone-Baseline.zip" .)
+          ls -lh Render360-Portal-iPhone-Baseline.zip
+
+      - name: Upload runtime artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Render360-Portal-iPhone-Baseline
+          path: Render360-Portal-iPhone-Baseline.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: PR validation complete
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          echo 'Portal runtime compiled and validated successfully.'
+          echo 'Artifact upload and Pages deployment are intentionally handled by the branch push run.'
+
+      - name: Configure GitHub Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/install
+
+  deploy-pages:
+    name: Deploy iPhone staging page
+    if: github.event_name != 'pull_request'
+    needs: build-wasm
+    runs-on: ubuntu-latest
+    environment:
+      name: portal-iphone-staging
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy baseline to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

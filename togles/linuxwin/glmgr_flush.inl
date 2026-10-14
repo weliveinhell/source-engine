@@ -502,7 +502,11 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 		( m_CurAttribs.m_pVertDecl != m_pDevice->m_pVertDecl ) ||
 		( m_CurAttribs.m_vtxAttribMap[0] != reinterpret_cast<const uint64 *>(m_pDevice->m_vertexShader->m_vtxAttribMap)[0] ) ||
 		( m_CurAttribs.m_vtxAttribMap[1] != reinterpret_cast<const uint64 *>(m_pDevice->m_vertexShader->m_vtxAttribMap)[1] ) ||
-		( memcmp( m_CurAttribs.m_streams, m_pDevice->m_streams, sizeof( m_pDevice->m_streams ) ) != 0 ) )
+		( memcmp( m_CurAttribs.m_streams, m_pDevice->m_streams, sizeof( m_pDevice->m_streams ) ) != 0 )
+#ifdef __EMSCRIPTEN__
+		|| ( m_CurAttribs.m_nBaseVertex != nBaseVertex )
+#endif
+		)
 	{
 		// This branch is taken 52.2% of the time in the L4D2 test1 (long) timedemo.
 
@@ -515,6 +519,7 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 		m_CurAttribs.m_vtxAttribMap[0] = reinterpret_cast<const uint64 *>(m_pDevice->m_vertexShader->m_vtxAttribMap)[0];
 		m_CurAttribs.m_vtxAttribMap[1] = reinterpret_cast<const uint64 *>(m_pDevice->m_vertexShader->m_vtxAttribMap)[1];
 		memcpy( m_CurAttribs.m_streams, m_pDevice->m_streams, sizeof( m_pDevice->m_streams ) );
+		m_CurAttribs.m_nBaseVertex = nBaseVertex;
 
 		unsigned char *pVertexShaderAttribMap = m_pDevice->m_vertexShader->m_vtxAttribMap;
 		const int nMaxVertexAttributesToCheck = m_drawingProgram[ kGLMVertexProgram ]->m_maxVertexAttrs;
@@ -570,6 +575,13 @@ FORCEINLINE void GLMContext::FlushDrawStates( uint nStartIndex, uint nEndIndex, 
 			{
 				nBufOffset += pBuf->m_nPersistentBufferStartOffset;
 			}
+#ifdef __EMSCRIPTEN__
+			// WebGL 2 has no glDrawRangeElementsBaseVertex, so the base vertex
+			// is applied here by starting every attribute that many vertices
+			// into its stream. (It used to be dropped entirely: every draw with
+			// a non-zero base vertex read the wrong vertices.)
+			nBufOffset += nBaseVertex * pStream->m_stride;
+#endif
 
 			SetBufAndVertexAttribPointer( nIndex, pBuf->GetHandle(), 
 				pStream->m_stride, pDeclElem->m_gldecl.m_datatype, pDeclElem->m_gldecl.m_normalized, pDeclElem->m_gldecl.m_nCompCount, 

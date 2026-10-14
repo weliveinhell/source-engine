@@ -242,7 +242,9 @@ public:
 	char					*m_pActualPseudoBuf;			// storage for pseudo buffer
 	char					*m_pPseudoBuf;			// storage for pseudo buffer
 	char					*m_pStaticBuffer;
-	
+	char					*m_pWebStaging;			// browser build: CPU copy standing in for a mapped range
+	bool					m_bWebHasData;			// browser build: something was uploaded, so a staged lock must read it back
+
 	GLMBuffLockParams		m_LockParams;
 											
 	static char				ALIGN16 m_StaticBuffers[ GL_MAX_STATIC_BUFFERS ][ GL_STATIC_BUFFER_SIZE ] ALIGN16_POST;

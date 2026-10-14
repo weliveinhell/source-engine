@@ -666,10 +666,16 @@ static void OverrideMaterialSystemConfigFromCommandLine( MaterialSystem_Config_t
 	config.m_nAAQuality = CommandLine()->ParmValue( "-mat_aaquality", config.m_nAAQuality );
 
 	// Clamp the requested dimensions to the display resolution
+#ifdef __EMSCRIPTEN__
+	// In the browser the GL layer reports a fixed 640x480 "display", which
+	// squashed the page-sized -w/-h back to 4:3. The canvas is whatever size
+	// the page asks for, so keep the requested dimensions.
+#else
 	MaterialVideoMode_t videoMode;
 	materials->GetDisplayMode( videoMode );
 	config.m_VideoMode.m_Width = MIN( videoMode.m_Width, config.m_VideoMode.m_Width );
 	config.m_VideoMode.m_Height = MIN( videoMode.m_Height, config.m_VideoMode.m_Height );
+#endif
 
 	// safe mode
 	if ( CommandLine()->FindParm( "-safe" ) )

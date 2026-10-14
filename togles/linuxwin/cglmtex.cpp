@@ -717,6 +717,18 @@ ConVar gl_minimize_rt_tex ( "gl_minimize_rt_tex", "0" );	// if 1, set the GL_TEX
 ConVar gl_minimize_all_tex ( "gl_minimize_all_tex", "1" );	// if 1, set the GL_TEXTURE_MINIMIZE_STORAGE_APPLE texture parameter to cut off mipmaps for textures which are unmipped
 ConVar gl_minimize_tex_log ( "gl_minimize_tex_log", "0" );	// if 1, printf the names of the tex that got minimized
 
+#ifdef __EMSCRIPTEN__
+// Dynamic textures (lightmap pages) normally stream through a mapped pixel
+// unpack buffer. WebGL can't map buffers: Emscripten's emulation returns fresh
+// uninitialized memory on every map and re-uploads the whole slice on unmap,
+// so each re-lock of a lightmap page wiped the surfaces written earlier and
+// filled the world with garbage lighting. In the browser, dynamic textures
+// keep a persistent CPU backing store like managed textures do instead.
+#define GLM_DYNAMIC_TEX_USES_PBO( flags ) false
+#else
+#define GLM_DYNAMIC_TEX_USES_PBO( flags ) ( ( ( flags ) & kGLMTexDynamic ) != 0 )
+#endif
+
 CGLMTex::CGLMTex( GLMContext *ctx, GLMTexLayout *layout, uint levels, const char *debugLabel )
 {
 #if GLMDEBUG
@@ -771,7 +783,7 @@ CGLMTex::CGLMTex( GLMContext *ctx, GLMTexLayout *layout, uint levels, const char
 	m_mapped = NULL;
 	m_pbo = 0;
 
-	if( m_layout->m_key.m_texFlags & kGLMTexDynamic )
+	if( GLM_DYNAMIC_TEX_USES_PBO( m_layout->m_key.m_texFlags ) )
 	{
 		gGL->glGenBuffers(1, &m_pbo);
 		gGL->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, m_pbo);
@@ -3335,6 +3347,11 @@ void convert_texture( GLenum &internalformat, GLsizei width, GLsizei height, GLe
 	if( internalformat == GL_SRGB8 && format == GL_RGBA )
 		internalformat = GL_SRGB8_ALPHA8;
 
+	// A 3-channel internal format with 4-channel data is invalid in GLES 3 /
+	// WebGL 2 (the texture gets no image at all), so promote it.
+	if( internalformat == GL_RGB8 && format == GL_RGBA )
+		internalformat = GL_RGBA8;
+
 	if( format == GL_LUMINANCE || format == GL_LUMINANCE_ALPHA )
 		internalformat = format;
 
@@ -3411,14 +3428,8 @@ GLvoid *uncompressDXTc(GLsizei width, GLsizei height, GLenum format, GLsizei ima
     int pixelsize = 4;
     if (format == GL_COMPRESSED_RGB_S3TC_DXT1_EXT || format == GL_COMPRESSED_SRGB_S3TC_DXT1_EXT)
         pixelsize = 3;
-    // check with the size of the input data stream if the stream is in fact uncompressed
-    if (imageSize == width*height*pixelsize || data==NULL) {
-        // uncompressed stream
+    if (data==NULL)
         return (GLvoid*)data;
-    }
-    // alloc memory
-    GLvoid *pixels = malloc(((width+3)&~3)*((height+3)&~3)*pixelsize);
-    // uncompress loop
     int blocksize;
     switch (format) {
         case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
@@ -3427,13 +3438,25 @@ GLvoid *uncompressDXTc(GLsizei width, GLsizei height, GLenum format, GLsizei ima
         case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT:
             blocksize = 8;
             break;
-        case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
-        case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
-        case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT:
-        case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT:
+        default:
             blocksize = 16;
             break;
     }
+    // Blocks always cover 4x4 texels, so decode into a buffer padded to whole
+    // blocks and let the caller upload the visible part with that row length.
+    // (Decoding 2x2 and 1x1 mips with the real width as the row stride made
+    // neighbouring rows overwrite each other, and a 2x2 DXT5 mip is exactly
+    // as large as 2x2 RGBA, so it used to be mistaken for uncompressed data.)
+    const int paddedWidth = (width+3)&~3;
+    const int paddedHeight = (height+3)&~3;
+    // check with the size of the input data stream if the stream is in fact uncompressed
+    if (imageSize != (paddedWidth/4)*(paddedHeight/4)*blocksize && imageSize == width*height*pixelsize) {
+        // uncompressed stream
+        return (GLvoid*)data;
+    }
+    // alloc memory
+    GLvoid *pixels = malloc(paddedWidth*paddedHeight*pixelsize);
+    // uncompress loop
     uintptr_t src = (uintptr_t) data;
     for (int y=0; y<height; y+=4) {
         for (int x=0; x<width; x+=4) {
@@ -3442,15 +3465,15 @@ GLvoid *uncompressDXTc(GLsizei width, GLsizei height, GLenum format, GLsizei ima
                 case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
                 case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
                 case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT:
-                    DecompressBlockDXT1(x, y, width, (uint8_t*)src, transparent0, simpleAlpha, complexAlpha, (uint32_t*)pixels);
+                    DecompressBlockDXT1(x, y, paddedWidth, (uint8_t*)src, transparent0, simpleAlpha, complexAlpha, (uint32_t*)pixels);
                     break;
                 case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
                 case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT:
-                    DecompressBlockDXT3(x, y, width, (uint8_t*)src, transparent0, simpleAlpha, complexAlpha, (uint32_t*)pixels);
+                    DecompressBlockDXT3(x, y, paddedWidth, (uint8_t*)src, transparent0, simpleAlpha, complexAlpha, (uint32_t*)pixels);
                     break;
                 case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
                 case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT:
-                    DecompressBlockDXT5(x, y, width, (uint8_t*)src, transparent0, simpleAlpha, complexAlpha, (uint32_t*)pixels);
+                    DecompressBlockDXT5(x, y, paddedWidth, (uint8_t*)src, transparent0, simpleAlpha, complexAlpha, (uint32_t*)pixels);
                     break;
             }
             src+=blocksize;
@@ -3495,7 +3518,19 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
 			intformat = hasAlpha ? GL_SRGB8_ALPHA8 : GL_SRGB8;
 	}
 
+	const bool decoded = pixels && pixels != data;
+	if( decoded )
+	{
+		// decoded texels are tightly packed rows of whole 4x4 blocks
+		gGL->glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+		gGL->glPixelStorei( GL_UNPACK_ROW_LENGTH, (width+3)&~3 );
+	}
 	gGL->glTexImage2D(target, level, intformat, width, height, border, format, type, pixels);
+	if( decoded )
+	{
+		gGL->glPixelStorei( GL_UNPACK_ROW_LENGTH, 0 );
+		gGL->glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+	}
 	if( data != pixels )
 		free(pixels);
 }
@@ -3828,7 +3863,7 @@ void CGLMTex::Lock( GLMTexLockParams *params, char** addressOut, int* yStrideOut
 	// d - the params of the lock request have been saved in the lock table (in the context)
 	
 	// so step 1 is unambiguous.  If there's no backing storage, make some.
-	if (!m_backing && !(m_layout->m_key.m_texFlags & kGLMTexDynamic))
+	if (!m_backing && !GLM_DYNAMIC_TEX_USES_PBO( m_layout->m_key.m_texFlags ))
 	{
 		if ( gl_pow2_tempmem.GetBool() )
 		{
@@ -3841,11 +3876,11 @@ void CGLMTex::Lock( GLMTexLockParams *params, char** addressOut, int* yStrideOut
 			unStoragePow2 |= unStoragePow2 >> 8;
 			unStoragePow2 |= unStoragePow2 >> 16;
 			unStoragePow2++;
-			m_backing = (char *)malloc( unStoragePow2 );
+			m_backing = (char *)calloc( 1, unStoragePow2 );
 		}
 		else
 		{
-			m_backing = (char *)malloc( m_layout->m_storageTotalSize );
+			m_backing = (char *)calloc( 1, m_layout->m_storageTotalSize );
 		}
 
 		// clear the kSliceStorageValid bit on all slices
@@ -3940,7 +3975,7 @@ void CGLMTex::Lock( GLMTexLockParams *params, char** addressOut, int* yStrideOut
 
 	desc->m_sliceRegionOffset = offsetInSlice + desc->m_sliceBaseOffset;
 
-	if ( (m_layout->m_key.m_texFlags & kGLMTexDynamic) || (params->m_readonly && copyout) )
+	if ( GLM_DYNAMIC_TEX_USES_PBO( m_layout->m_key.m_texFlags ) || (params->m_readonly && copyout) )
 	{
 		// read the whole slice
 		// (odds are we'll never request anything but a whole slice to be read..)
@@ -4080,7 +4115,7 @@ void CGLMTex::Unlock( GLMTexLockParams *params )
 		// because it reuploads the whole thing each slice; we only use 3D textures
 		// for the 32x32x32 colorpsace conversion lookups and debugging the problem
 		// would not save any more memory.
-		if ( !m_texClientStorage && ( m_texGLTarget == GL_TEXTURE_2D ) && m_backing )
+		if ( !m_texClientStorage && ( m_texGLTarget == GL_TEXTURE_2D ) && m_backing && !( m_layout->m_key.m_texFlags & kGLMTexDynamic ) )
 		{
 			free(m_backing);
 			m_backing = NULL;

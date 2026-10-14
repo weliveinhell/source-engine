@@ -32,6 +32,10 @@ def build(bld):
 	install_path = bld.env.BINDIR
 
 	if bld.env.DEST_OS == 'wasm':
+		# main.cpp must pull the browser-backed retail bridge into the final
+		# MAIN_MODULE. Keep both in one archive member so runtime-dlopen symbols
+		# cannot be discarded as an otherwise-unreferenced static-library object.
+		source = ['render360_wasm_main.cpp']
 		bld.stlib(
 			source   = source,
 			target   = PROJECT_NAME,

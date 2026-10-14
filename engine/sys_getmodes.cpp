@@ -466,6 +466,19 @@ int CVideoMode_Common::FindVideoMode( int nDesiredWidth, int nDesiredHeight, boo
 
 #endif // USE_SDL
 
+#ifdef __EMSCRIPTEN__
+	// The browser canvas can be any size; there is no display mode list to
+	// snap to. Snapping sent the game to mode 0 (640x480), which the page then
+	// stretched across a 2.16:1 iPhone screen: zoomed, squashed 3D and huge
+	// menu text. Always use exactly the size that was asked for.
+	if ( nDesiredWidth > 0 && nDesiredHeight > 0 )
+	{
+		RequestedWindowVideoMode().width = nDesiredWidth;
+		RequestedWindowVideoMode().height = nDesiredHeight;
+		return VIDEO_MODE_REQUESTED_WINDOW_SIZE;
+	}
+#endif
+
     // Check the default window size..
     if ( ( nDesiredWidth == DefaultVideoMode().width) && (nDesiredHeight == DefaultVideoMode().height) )
         return VIDEO_MODE_DEFAULT;
@@ -528,6 +541,9 @@ void CVideoMode_Common::ResetCurrentModeForNewResolution( int nWidth, int nHeigh
 	m_nUIHeight = pMode->height;
 	m_nStereoWidth = pMode->width;
 	m_nStereoHeight = pMode->height;
+#ifdef __EMSCRIPTEN__
+	Msg( "[Render360 video] mode %dx%d (asked %dx%d, windowed=%d)\n", m_nModeWidth, m_nModeHeight, nWidth, nHeight, bWindowed ? 1 : 0 );
+#endif
 
 	// assume we won't be overriding the position
 	m_bVROverride = false;

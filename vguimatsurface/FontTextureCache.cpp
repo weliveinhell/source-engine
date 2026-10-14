@@ -363,6 +363,16 @@ void CFontTextureCache::CreateFontMaterials( Page_t &page, ITexture *pFontTextur
 	pVMTKeyValues->SetInt( "$ignorez", 1 );
 	pVMTKeyValues->SetInt( "$no_fullbright", 1 );
 	pVMTKeyValues->SetInt( "$translucent", 1 );
+#ifdef __EMSCRIPTEN__
+	// On iPhone WebGL the font page's alpha reads as opaque, so normal alpha
+	// blending paints each glyph's whole cell (the black box behind every
+	// letter). Glyph coverage is also in RGB on this build (linuxfont.cpp), so
+	// additive blending draws exactly the letter shape either way. Text in
+	// Source's UI is light on dark, which additive handles. Bitmap fonts come
+	// from image files whose shape lives only in alpha, so they keep blending.
+	if ( !bitmapFont )
+		pVMTKeyValues->SetInt( "$additive", 1 );
+#endif
 	pVMTKeyValues->SetString( "$basetexture", pFontTexture->GetName() );
 	IMaterial *pMaterial = g_pMaterialSystem->CreateMaterial( "__fontpage", pVMTKeyValues );
 	pMaterial->Refresh();

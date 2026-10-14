@@ -2,6 +2,9 @@
 
 ## hosted on [yikes.pw](https://yikes.pw)
 
+## Sol engineering gauntlet
+For substantial engine, WebAssembly, rendering, browser, and iPhone/Safari work, use the project-specific [Source Engine Render360 Sol Gauntlet](.github/SOL_GAUNTLET.md). It defines the Builder → Critic → Repair loop, Portal runtime milestones, CI/build gates, WASM memory/thread checks, map-chunk validation, rendering/lightmap review, audio/save/fullscreen gates, and evidence rules for claiming a fix.
+
 ## list of broken stuff
 + sound
 + saving/loading (works, TODO: save to browser storage)

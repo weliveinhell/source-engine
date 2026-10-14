@@ -554,7 +554,14 @@ def configure(conf):
 
 		flags += ['-sSHARED_MEMORY=1', '-msimd128', '-msse']
 		flags += ['-sUSE_BZIP2=1', '-sUSE_SDL=2', '-sUSE_FREETYPE=1', '-sUSE_LIBJPEG=1', '-sUSE_LIBPNG']
+		# Keep SIDE_MODULE=1. SIDE_MODULE=2 drops every symbol not marked
+		# DLL_EXPORT, but the modules share C++ classes across module boundaries
+		# (e.g. CThread::Start from tier0), so it aborted at load with
+		# "undefined symbol". It only saved ~5% anyway.
 		linkflags += ['-sSIDE_MODULE=1', '-Wl,--allow-multiple-definition']
+		# Keep function names in the shipped modules so Safari's Wasm stack
+		# traces name the failing code on iPhone (diagnostics), not wasm-function[N].
+		linkflags += ['--profiling-funcs']
 		flags += ['-sFULL_ES3', '-sMALLOC=mimalloc']
 
 	if conf.env.DEST_OS == 'freebsd':

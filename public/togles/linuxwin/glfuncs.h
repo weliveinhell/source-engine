@@ -136,6 +136,7 @@ GL_FUNC(OpenGL,false,void*,glMapBufferRange,(GLenum a,GLintptr b,GLsizeiptr c,GL
 GL_FUNC_VOID(OpenGL,false,glFlushMappedBufferRange,(GLenum a,GLintptr b,GLsizeiptr c),(a,b,c))
 GL_EXT(GL_ARB_vertex_buffer_object,-1,-1)
 GL_FUNC_VOID(OpenGL,true,glBufferSubData,(GLenum a,GLintptr b,GLsizeiptr c,const GLvoid *d),(a,b,c,d))
+GL_FUNC_VOID(OpenGL,false,glGetBufferSubData,(GLenum a,GLintptr b,GLsizeiptr c,GLvoid *d),(a,b,c,d))
 GL_EXT(GL_ARB_occlusion_query,-1,-1)
 GL_FUNC_VOID(OpenGL,false,glGetQueryObjectuiv,(GLuint a,GLenum b,GLuint *c),(a,b,c))
 GL_EXT(GL_APPLE_texture_range,-1,-1)

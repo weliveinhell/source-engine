@@ -14,6 +14,38 @@
 #include "tier0/memdbgon.h"
 
 //-----------------------------------------------------------------------------
+// SDL finger ids are arbitrary 64-bit values. Android happens to hand out
+// 0, 1, 2..., but browsers pass the DOM Touch.identifier, which on iPhone
+// Safari is a large number. Used directly as an index (truncated to int, so
+// often negative) it wrote outside m_touchAccumX/Y on every tap: the iPhone
+// "out of bounds memory access" in CInputSystem::FingerEvent. Map each live
+// finger to a small slot instead.
+//-----------------------------------------------------------------------------
+static SDL_FingerID s_FingerSlotId[TOUCH_FINGER_MAX_COUNT];
+static bool s_FingerSlotUsed[TOUCH_FINGER_MAX_COUNT];
+
+static int FingerSlot( SDL_FingerID id, bool bAllocate )
+{
+	for ( int i = 0; i < TOUCH_FINGER_MAX_COUNT; i++ )
+	{
+		if ( s_FingerSlotUsed[i] && s_FingerSlotId[i] == id )
+			return i;
+	}
+	if ( !bAllocate )
+		return -1;
+	for ( int i = 0; i < TOUCH_FINGER_MAX_COUNT; i++ )
+	{
+		if ( !s_FingerSlotUsed[i] )
+		{
+			s_FingerSlotUsed[i] = true;
+			s_FingerSlotId[i] = id;
+			return i;
+		}
+	}
+	return -1;	// more fingers than slots: ignore the extra one
+}
+
+//-----------------------------------------------------------------------------
 // Handle the events coming from the Touch SDL subsystem.
 //-----------------------------------------------------------------------------
 int TouchSDLWatcher( void *userInfo, SDL_Event *event )
@@ -22,15 +54,26 @@ int TouchSDLWatcher( void *userInfo, SDL_Event *event )
 
 	if( !event || !pInputSystem ) return 1;
 
+	int slot;
 	switch ( event->type ) {
 	case SDL_FINGERDOWN:
-		pInputSystem->FingerEvent( IE_FingerDown, event->tfinger.fingerId, event->tfinger.x, event->tfinger.y, event->tfinger.dx, event->tfinger.dy );
+		slot = FingerSlot( event->tfinger.fingerId, true );
+		if ( slot >= 0 )
+			pInputSystem->FingerEvent( IE_FingerDown, slot, event->tfinger.x, event->tfinger.y, event->tfinger.dx, event->tfinger.dy );
 		break;
 	case SDL_FINGERUP:
-		pInputSystem->FingerEvent( IE_FingerUp, event->tfinger.fingerId, event->tfinger.x, event->tfinger.y, event->tfinger.dx, event->tfinger.dy );
+		slot = FingerSlot( event->tfinger.fingerId, false );
+		if ( slot >= 0 )
+		{
+			pInputSystem->FingerEvent( IE_FingerUp, slot, event->tfinger.x, event->tfinger.y, event->tfinger.dx, event->tfinger.dy );
+			s_FingerSlotUsed[slot] = false;
+		}
 		break;
 	case SDL_FINGERMOTION:
-		pInputSystem->FingerEvent( IE_FingerMotion ,event->tfinger.fingerId, event->tfinger.x, event->tfinger.y, event->tfinger.dx, event->tfinger.dy );
+		// A finger that went down before the watcher existed gets a slot here.
+		slot = FingerSlot( event->tfinger.fingerId, true );
+		if ( slot >= 0 )
+			pInputSystem->FingerEvent( IE_FingerMotion, slot, event->tfinger.x, event->tfinger.y, event->tfinger.dx, event->tfinger.dy );
 		break;
 	}
 
@@ -66,6 +109,11 @@ void CInputSystem::ShutdownTouch()
 
 bool CInputSystem::GetTouchAccumulators( int fingerId, float &dx, float &dy )
 {
+	if ( fingerId < 0 || fingerId >= TOUCH_FINGER_MAX_COUNT )
+	{
+		dx = dy = 0.f;
+		return false;
+	}
 	dx = m_touchAccumX[fingerId];
 	dy = m_touchAccumY[fingerId];
 
@@ -76,7 +124,7 @@ bool CInputSystem::GetTouchAccumulators( int fingerId, float &dx, float &dy )
 
 void CInputSystem::FingerEvent(int eventType, int fingerId, float x, float y, float dx, float dy)
 {
-	if( fingerId >= TOUCH_FINGER_MAX_COUNT )
+	if( fingerId < 0 || fingerId >= TOUCH_FINGER_MAX_COUNT )
 		return;
 
 	if( eventType == IE_FingerUp )

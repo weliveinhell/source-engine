@@ -736,7 +736,11 @@ FORCEINLINE void GLContextSet( GLBlendEnableSRGB_t *src )
 //	GLint encoding = 0;
 //	gGL->glGetFramebufferAttachmentParameteriv( GL_DRAW_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING, &encoding );
 
+#ifndef __EMSCRIPTEN__
+	// WebGL has no GL_FRAMEBUFFER_SRGB switch (INVALID_ENUM every frame); the
+	// browser build does the sRGB write in the pixel shader instead.
 	glSetEnable( GL_FRAMEBUFFER_SRGB_EXT, src->enable != 0 );
+#endif
 }
 
 FORCEINLINE void GLContextGet( GLBlendEnableSRGB_t *dst )
@@ -1512,6 +1516,7 @@ class GLMContext
 			IDirect3DVertexDeclaration9	*m_pVertDecl;
 			D3DStreamDesc m_streams[ D3D_MAX_STREAMS ];
 			uint64 m_vtxAttribMap[2];
+			uint m_nBaseVertex;		// browser build: base vertex baked into the attrib pointers
 		};
 
 		CurAttribs_t m_CurAttribs;
@@ -1523,6 +1528,7 @@ class GLMContext
 			memset( m_CurAttribs.m_streams, 0, sizeof( m_CurAttribs.m_streams ) );
 			m_CurAttribs.m_vtxAttribMap[0] = 0xBBBBBBBBBBBBBBBBULL;
 			m_CurAttribs.m_vtxAttribMap[1] = 0xBBBBBBBBBBBBBBBBULL;
+			m_CurAttribs.m_nBaseVertex = 0xFFFFFFFF;
 		}
 		
 		FORCEINLINE void ReleasedShader() {	NullProgram(); }

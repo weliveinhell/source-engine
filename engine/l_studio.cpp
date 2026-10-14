@@ -91,10 +91,29 @@ ConVar r_rootlod( "r_rootlod", "0", FCVAR_MATERIAL_SYSTEM_THREAD | FCVAR_ARCHIVE
 static ConVar r_decalstaticprops( "r_decalstaticprops", "1", 0, "Decal static props test" );
 static ConCommand r_flushlod( "r_flushlod", FlushLOD_f, "Flush and reload LODs." );
 ConVar r_debugrandomstaticlighting( "r_debugrandomstaticlighting", "0", FCVAR_CHEAT, "Set to 1 to randomize static lighting for debugging.  Must restart for change to take affect." );
+#ifdef __EMSCRIPTEN__
+// Static prop vertex lighting (.vhv) arrives through the async filesystem into
+// DataCache-managed color meshes. In the browser build props were drawn with
+// color meshes that were not valid yet or already released: garbage
+// green/blue lighting on props and an out-of-bounds crash in
+// CMeshDX8::SetColorStreamState on iPhone. Props fall back to regular model
+// lighting instead.
+ConVar r_proplightingfromdisk( "r_proplightingfromdisk", "0", FCVAR_CHEAT, "0=Off, 1=On, 2=Show Errors" );
+#else
 ConVar r_proplightingfromdisk( "r_proplightingfromdisk", "1", FCVAR_CHEAT, "0=Off, 1=On, 2=Show Errors" );
+#endif
 static ConVar r_itemblinkmax( "r_itemblinkmax", ".3", FCVAR_CHEAT );
 static ConVar r_itemblinkrate( "r_itemblinkrate", "4.5", FCVAR_CHEAT );
+#ifdef __EMSCRIPTEN__
+// The pooled allocator locks only the first N vertices of the shared buffer
+// and then writes each prop's colors at a byte offset past that range. That
+// relies on D3D handing out a pointer to the whole buffer; the browser GL
+// layer stages exactly the locked range, so those writes landed outside it.
+// Give every static prop its own color mesh instead.
+static ConVar r_proplightingpooling( "r_proplightingpooling", "0", FCVAR_CHEAT, "0 - off, 1 - static prop color meshes are allocated from a single shared vertex buffer (on hardware that supports stream offset)" );
+#else
 static ConVar r_proplightingpooling( "r_proplightingpooling", "-1.0", FCVAR_CHEAT, "0 - off, 1 - static prop color meshes are allocated from a single shared vertex buffer (on hardware that supports stream offset)" );
+#endif
 
 //-----------------------------------------------------------------------------
 // StudioRender config 

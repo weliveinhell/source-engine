@@ -21,6 +21,10 @@
 
 #include "SDL.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
@@ -102,6 +106,7 @@ private:
 	int			m_pauseCount;
 	int			m_readPos;
 	int			m_partialWrite;
+	int			m_paintedEnd;		// web: last sample time written into the ring
 
 	// Memory for the wave data
 	uint8_t		*m_pBuffer;
@@ -165,6 +170,7 @@ bool CAudioDeviceSDLAudio::Init( void )
 	m_pBuffer = NULL;
 	m_readPos = 0;
 	m_partialWrite = 0;
+	m_paintedEnd = 0;
 	m_devId = 0;
 
 	OpenWaveOut();
@@ -223,6 +229,29 @@ void CAudioDeviceSDLAudio::OpenWaveOut( void )
 	//#define SDLAUDIO_FAIL(fnstr) do { printf("SDLAUDIO: " fnstr " failed: %s\n", SDL_GetError ? SDL_GetError() : "???"); CloseWaveOut(); return; } while (false)
 	#define SDLAUDIO_FAIL(fnstr) do { const char *err = SDL_GetError(); printf("SDLAUDIO: " fnstr " failed: %s\n", err ? err : "???"); CloseWaveOut(); return; } while (false)
 
+#ifdef __EMSCRIPTEN__
+	// SDL's Emscripten driver calls AudioCallback from the browser's main
+	// thread, which has no instance of this side module, so nothing was ever
+	// heard. Instead the page reads the ring buffer straight out of shared
+	// Wasm memory from an AudioWorklet (Module.render360AudioStart in pre.js)
+	// and advances m_readPos itself, exactly as AudioCallback would. The
+	// mixer is unchanged: it still paints ahead of GetOutputPosition().
+	AllocateOutputBuffers();
+	m_devId = 1;
+	// MAIN_THREAD_EM_ASM cannot be used here: its JS lives in this side
+	// module, which the main browser thread never instantiates. Post the
+	// same 'callHandler' message Emscripten's own proxying understands.
+	EM_ASM({
+		if (typeof ENVIRONMENT_IS_PTHREAD !== 'undefined' && ENVIRONMENT_IS_PTHREAD) {
+			postMessage({ cmd: 'callHandler', handler: 'render360AudioStart', args: [$0, $1, $2, $3, $4, $5] });
+		} else if (Module.render360AudioStart) {
+			Module.render360AudioStart($0, $1, $2, $3, $4, $5);
+		}
+	}, m_pBuffer, WAV_BUFFER_SIZE * WAV_BUFFERS, &m_readPos, &m_pauseCount, SOUND_DMA_SPEED, &m_paintedEnd);
+	DevMsg( "Render360: web audio ring %d bytes at %d Hz\n", WAV_BUFFER_SIZE * WAV_BUFFERS, SOUND_DMA_SPEED );
+	return;
+#endif
+
 	if (!SDL_WasInit(SDL_INIT_AUDIO))
 	{
 		if (SDL_InitSubSystem(SDL_INIT_AUDIO))
@@ -268,6 +297,22 @@ void CAudioDeviceSDLAudio::OpenWaveOut( void )
 //-----------------------------------------------------------------------------
 void CAudioDeviceSDLAudio::CloseWaveOut( void ) 
 { 
+#ifdef __EMSCRIPTEN__
+	if (m_devId)
+	{
+		EM_ASM({
+			if (typeof ENVIRONMENT_IS_PTHREAD !== 'undefined' && ENVIRONMENT_IS_PTHREAD) {
+				postMessage({ cmd: 'callHandler', handler: 'render360AudioStop', args: [] });
+			} else if (Module.render360AudioStop) {
+				Module.render360AudioStop();
+			}
+		});
+		m_devId = 0;
+	}
+	// The ring is deliberately not freed: the audio thread stops reading it
+	// asynchronously. It is 64 KiB and audio is only reopened on a restart.
+	return;
+#endif
 	// none of these SDL_* functions are available to call if this is false.
 	if (m_devId)
 	{
@@ -421,7 +466,9 @@ void CAudioDeviceSDLAudio::Pause( void )
 	if (m_pauseCount == 1)
 	{
 		debugsdl("SDLAUDIO: PAUSE\n");
+#ifndef __EMSCRIPTEN__	// the web reader watches m_pauseCount itself
 		SDL_PauseAudioDevice(m_devId, 1);
+#endif
 	}
 }
 
@@ -434,7 +481,9 @@ void CAudioDeviceSDLAudio::UnPause( void )
 		if (m_pauseCount == 0)
 		{
 			debugsdl("SDLAUDIO: UNPAUSE\n");
+#ifndef __EMSCRIPTEN__
 			SDL_PauseAudioDevice(m_devId, 0);
+#endif
 		}
 	}
 }
@@ -550,6 +599,12 @@ void CAudioDeviceSDLAudio::TransferSamples( int end )
 	if ( m_pBuffer )
 	{
 		S_TransferStereo16( m_pBuffer, PAINTBUFFER, lpaintedtime, endtime );
+#ifdef __EMSCRIPTEN__
+		// Published after the samples are in the ring: the web reader never
+		// plays past this point, so a slow frame is a short gap instead of
+		// the stale ring looping (a buzz).
+		__atomic_store_n( &m_paintedEnd, endtime, __ATOMIC_RELEASE );
+#endif
 	}
 }
 
